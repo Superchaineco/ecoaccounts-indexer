@@ -18,6 +18,7 @@ where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
     let contract = SuperChainModule::new(contract_addr, provider.clone());
+    let t0 = std::time::Instant::now();
     let logs = contract
         .SuperChainSmartAccountCreated_filter()
         .from_block(BlockNumberOrTag::Number(from.into()))
@@ -96,6 +97,9 @@ where
     Ok(Stats {
         logs_found: rows.len(),
         rows_written: batch_res?.rows_affected(),
+        from_block: from,
+        to_block: to,
+        took_ms: t0.elapsed().as_millis(),
     })
 }
 
