@@ -1,0 +1,121 @@
+use std::borrow::Cow;
+
+use alloy::{eips::BlockNumberOrTag, primitives::Address};
+use eyre::{Ok, Result};
+use serde_json::json;
+use sqlx::{PgPool, QueryBuilder};
+
+use crate::{contracts::SuperChainModule, strategies::Stats};
+
+pub async fn process_super_account_created_chunk<P>(
+    provider: P,
+    db: &PgPool,
+    contract_addr: Address,
+    from: u64,
+    to: u64,
+) -> Result<Stats>
+where
+    P: alloy::providers::Provider + Clone + Send + Sync + 'static,
+{
+    let contract = SuperChainModule::new(contract_addr, provider.clone());
+    let logs = contract
+        .SuperChainSmartAccountCreated_filter()
+        .from_block(BlockNumberOrTag::Number(from.into()))
+        .to_block(BlockNumberOrTag::Number(to.into()))
+        .query()
+        .await?;
+
+    if logs.is_empty() {
+        return Ok(Stats::default());
+    }
+    struct Row {
+        account_hex: String,
+        username: String,
+        eoas: Vec<String>,
+        noun_json: serde_json::Value,
+        last_update_block_number: Option<i32>,
+        last_update_tx_hash: Option<String>,
+    }
+
+    let mut rows = Vec::with_capacity(logs.len());
+    for (event, raw_log) in logs {
+        let (username_cow, nuls) = sanitize_text(&event.superChainId);
+        if nuls > 0 {
+            eprintln!(
+                "[sanitize] NULs={} addr={} tx={:?} blk={:?} username_len_before={} username_len_after={}",
+                nuls,
+                format!("{:#x}", event.safe),
+                raw_log.transaction_hash.map(|h| format!("{:#x}", h)),
+                raw_log.block_number,
+                event.superChainId.len(),
+                username_cow.len()
+            );
+        }
+
+        let noun_json = json!({
+            "background": event.noun.background.to::<u64>(),
+            "body":       event.noun.body.to::<u64>(),
+            "accessory":  event.noun.accessory.to::<u64>(),
+            "head":       event.noun.head.to::<u64>(),
+            "glasses":    event.noun.glasses.to::<u64>(),
+        });
+
+        rows.push(Row {
+            account_hex: format!("{:#x}", event.safe),
+            username: username_cow.into_owned(),
+            eoas: vec![format!("{:#x}", event.initialOwner)],
+            noun_json,
+            last_update_block_number: raw_log.block_number.map(|b| b as i32),
+            last_update_tx_hash: raw_log.transaction_hash.map(|h| format!("{:#x}", h)),
+        });
+    }
+
+    let mut qb = QueryBuilder::new(
+        "INSERT INTO super_accounts (
+            account, nationality, username, eoas, level,
+            noun, total_points, total_badges,
+            last_update_block_number, last_update_tx_hash
+        ) ",
+    );
+
+    qb.push_values(rows.iter(), |mut b, r| {
+        b.push_bind(&r.account_hex)
+            .push_bind(Option::<&str>::None) // nationality NULL
+            .push_bind(&r.username)
+            .push_bind(&r.eoas) // TEXT[]
+            .push_bind(0i32) // level
+            .push_bind(&r.noun_json) // JSONB
+            .push_bind(0i32) // total_points
+            .push_bind(0i32) // total_badges
+            .push_bind(r.last_update_block_number)
+            .push_bind(&r.last_update_tx_hash);
+    });
+    qb.push(" ON CONFLICT (account) DO NOTHING");
+
+    let batch_res = qb.build().execute(db).await;
+    Ok(Stats {
+        logs_found: rows.len(),
+        rows_written: batch_res?.rows_affected(),
+    })
+}
+
+fn sanitize_text(s: &str) -> (Cow<'_, str>, usize) {
+    let mut nul_count = 0usize;
+    let cleaned: String = s
+        .chars()
+        .filter(|&ch| {
+            if ch == '\0' {
+                nul_count += 1;
+                return false;
+            }
+            let code = ch as u32;
+            !(code < 0x20 && ch != '\n' && ch != '\r' && ch != '\t')
+        })
+        .collect();
+
+    if nul_count == 0 && cleaned.len() == s.len() {
+        (Cow::Borrowed(s), 0)
+    } else {
+        (Cow::Owned(cleaned), nul_count)
+    }
+}
