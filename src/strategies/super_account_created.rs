@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
-use alloy::{eips::BlockNumberOrTag, primitives::Address};
+use alloy::{
+    eips::BlockNumberOrTag,
+    primitives::{Address, address},
+};
 use eyre::{Ok, Result};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder};
@@ -10,14 +13,14 @@ use crate::{contracts::SuperChainModule, strategies::Stats};
 pub async fn process_super_account_created_chunk<P>(
     provider: P,
     db: &PgPool,
-    contract_addr: Address,
     from: u64,
     to: u64,
 ) -> Result<Stats>
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let contract = SuperChainModule::new(contract_addr, provider.clone());
+    let super_chain_module_addr: Address = address!("0x1C9E6E3d1A8F5b3b0dFfA6e8C2b5D7c1bAbf9d63");
+    let contract = SuperChainModule::new(super_chain_module_addr, provider.clone());
     let t0 = std::time::Instant::now();
 
     tracing::info!(from = from, to = to, "processing event range");

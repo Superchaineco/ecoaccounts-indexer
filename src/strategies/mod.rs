@@ -1,5 +1,8 @@
 mod super_account_created;
+mod vaults_transactions_compound;
+
 pub use super_account_created::process_super_account_created_chunk;
+pub use vaults_transactions_compound::process_vaults_transactions_chunk;
 
 #[derive(Default, Debug)]
 pub struct Stats {
