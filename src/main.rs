@@ -1,5 +1,6 @@
 mod db;
 mod indexer;
+mod contracts;
 
 
 use std::env;

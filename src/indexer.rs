@@ -2,7 +2,6 @@ use alloy::{
     primitives::{Address},
     providers::{Provider, ProviderBuilder},
     rpc::types::BlockNumberOrTag,
-    sol,
 };
 use eyre::Result;
 use indicatif::{ProgressBar, ProgressStyle};
@@ -12,29 +11,7 @@ use sqlx::QueryBuilder;
 use std::time::Instant;
 use std::borrow::Cow;
 
-
-sol!(
-    #[sol(rpc)]
-    contract SuperChainModule {
-
-        #[derive(Debug)]
-        struct NounMetadata {
-            uint48 background;
-            uint48 body;
-            uint48 accessory;
-            uint48 head;
-            uint48 glasses;
-        }
-
-        #[derive(Debug)]
-        event SuperChainSmartAccountCreated(
-        address indexed safe,
-        address indexed initialOwner,
-        string superChainId,
-        NounMetadata noun
-    );
-    }
-);
+use crate::contracts::SuperChainModule;
 
 
 pub async fn sync_from_block(
