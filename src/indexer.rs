@@ -3,7 +3,7 @@ use alloy::{primitives::Address, providers::Provider};
 use eyre::{Result, ensure};
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
-use tracing::{info};
+use tracing::info;
 
 pub async fn run_indexer<P>(
     provider: P,
@@ -19,6 +19,9 @@ where
     ensure!(from_block <= to_block, "from_block > to_block");
     ensure!(chunk_size > 0, "chunk_size must be > 0");
     let total = to_block.saturating_sub(from_block).saturating_add(1);
+
+    info!(from = from_block, to = to_block, total, chunk_size, "starting run_indexer");
+
     let bar = ProgressBar::new(total.into());
     bar.set_style(
         ProgressStyle::with_template(
@@ -32,14 +35,20 @@ where
         let start = cur;
         let end = (start + chunk_size - 1).min(to_block);
 
-        process_super_account_created_chunk(provider.clone(), db, contract_addr, start, end)
+        let chunk_size_actual = end - start + 1;
+        info!(start, end, chunk_size_actual, "processing chunk");
+
+        let stats = process_super_account_created_chunk(provider.clone(), db, contract_addr, start, end)
             .await?;
 
-        bar.inc((end - start + 1) as u64);
+        info!(logs_found = stats.logs_found, rows_written = stats.rows_written, "chunk result");
+
+        bar.inc(chunk_size_actual as u64);
         cur = end.saturating_add(1);
     }
 
     bar.finish_with_message("✅ Sync completed.");
+    info!("run_indexer finished");
     Ok(())
 }
 

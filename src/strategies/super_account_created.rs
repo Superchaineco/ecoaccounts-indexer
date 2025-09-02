@@ -19,6 +19,9 @@ where
 {
     let contract = SuperChainModule::new(contract_addr, provider.clone());
     let t0 = std::time::Instant::now();
+
+    tracing::info!(from = from, to = to, "processing event range");
+
     let logs = contract
         .SuperChainSmartAccountCreated_filter()
         .from_block(BlockNumberOrTag::Number(from.into()))
@@ -27,6 +30,7 @@ where
         .await?;
 
     if logs.is_empty() {
+        tracing::info!(from = from, to = to, "no logs found in range");
         return Ok(Stats::default());
     }
     struct Row {
@@ -41,15 +45,18 @@ where
     let mut rows = Vec::with_capacity(logs.len());
     for (event, raw_log) in logs {
         let (username_cow, nuls) = sanitize_text(&event.superChainId);
+        let tx_hex = raw_log.transaction_hash.map(|h| format!("{:#x}", h));
+        let block_num = raw_log.block_number;
+
         if nuls > 0 {
-            eprintln!(
-                "[sanitize] NULs={} addr={} tx={:?} blk={:?} username_len_before={} username_len_after={}",
-                nuls,
-                format!("{:#x}", event.safe),
-                raw_log.transaction_hash.map(|h| format!("{:#x}", h)),
-                raw_log.block_number,
-                event.superChainId.len(),
-                username_cow.len()
+            tracing::warn!(
+                nuls = nuls,
+                account = format!("{:#x}", event.safe),
+                tx = tx_hex,
+                block = block_num,
+                before_len = event.superChainId.len(),
+                after_len = username_cow.len(),
+                "sanitized NULs in username"
             );
         }
 
@@ -94,12 +101,21 @@ where
     qb.push(" ON CONFLICT (account) DO NOTHING");
 
     let batch_res = qb.build().execute(db).await;
+    let took_ms = t0.elapsed().as_millis();
+    tracing::info!(
+        from = from,
+        to = to,
+        logs = rows.len(),
+        rows_written = batch_res.as_ref().map(|r| r.rows_affected()).unwrap_or(0),
+        took_ms,
+        "chunk processed",
+    );
     Ok(Stats {
         logs_found: rows.len(),
         rows_written: batch_res?.rows_affected(),
         from_block: from,
         to_block: to,
-        took_ms: t0.elapsed().as_millis(),
+        took_ms,
     })
 }
 
