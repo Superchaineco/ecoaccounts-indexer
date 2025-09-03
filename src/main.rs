@@ -26,7 +26,7 @@ async fn main() -> Result<()> {
     let db = connect_db().await?;
 
     let rpc_url = env::var("RPC_URL")?;
-    let from_block = 140060441;
+    let from_block = 125901332;
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;
 
     info!(rpc_url = %rpc_url,  from_block, "launching indexer");

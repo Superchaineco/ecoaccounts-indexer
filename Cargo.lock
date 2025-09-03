@@ -3991,6 +3991,7 @@ name = "superchain-indexer"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "async-trait",
  "chrono",
  "dotenv",
  "eyre",

@@ -4,8 +4,9 @@ use alloy::{eips::BlockNumberOrTag, primitives::address};
 use chrono::{TimeZone, Utc};
 use eyre::Result;
 use sqlx::{PgPool, QueryBuilder, query_scalar};
+use async_trait::async_trait;
 
-use crate::{contracts::Comet, strategies::Stats};
+use crate::{contracts::Comet, strategies::{Stats, ChunkProcessor}};
 
 #[derive(Clone, Copy, Debug)]
 enum Direction {
@@ -18,6 +19,15 @@ impl Direction {
             Direction::In => "in",
             Direction::Out => "out",
         }
+    }
+}
+
+pub struct VaultsTransactionsCompoundProcessor;
+
+#[async_trait]
+impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P> for VaultsTransactionsCompoundProcessor {
+    async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
+        process_vaults_transactions_chunk(provider, db, from, to).await
     }
 }
 

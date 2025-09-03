@@ -7,8 +7,18 @@ use alloy::{
 use eyre::{Ok, Result};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder};
+use async_trait::async_trait;
 
-use crate::{contracts::SuperChainModule, strategies::Stats};
+use crate::{contracts::SuperChainModule, strategies::{Stats, ChunkProcessor}};
+
+pub struct SuperAccountCreatedProcessor;
+
+#[async_trait]
+impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P> for SuperAccountCreatedProcessor {
+    async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
+        process_super_account_created_chunk(provider, db, from, to).await
+    }
+}
 
 pub async fn process_super_account_created_chunk<P>(
     provider: P,
@@ -19,7 +29,7 @@ pub async fn process_super_account_created_chunk<P>(
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let super_chain_module_addr: Address = address!("0x1C9E6E3d1A8F5b3b0dFfA6e8C2b5D7c1bAbf9d63");
+    let super_chain_module_addr: Address = address!("0x1Ee397850c3CA629d965453B3cF102E9A8806Ded");
     let contract = SuperChainModule::new(super_chain_module_addr, provider.clone());
     let t0 = std::time::Instant::now();
 

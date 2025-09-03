@@ -1,5 +1,5 @@
-use crate::strategies::{process_super_account_created_chunk, process_vaults_transactions_chunk};
-use alloy::{primitives::Address, providers::Provider};
+use crate::strategies::{ChunkProcessor, IndexedRangeDecorator, SuperAccountCreatedProcessor};
+use alloy::providers::Provider;
 use eyre::{Result, ensure};
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
@@ -43,16 +43,15 @@ where
         let chunk_size_actual = end - start + 1;
         info!(start, end, chunk_size_actual, "processing chunk");
 
-        // let stats = process_super_account_created_chunk(provider.clone(), db, start, end)
-        //     .await?;
+        // Usar decorador para super_account_created
+        let processor = IndexedRangeDecorator::new(SuperAccountCreatedProcessor, "super_account_created", false);
+        let stats = processor.process(provider.clone(), db, start, end).await?;
 
-        let stats = process_vaults_transactions_chunk(provider.clone(), db, start, end).await?;
+        // Para vaults, descomenta y usa:
+        // let processor = IndexedRangeDecorator::new(VaultsTransactionsCompoundProcessor, "vaults_transactions_compound", false);
+        // let stats = processor.process(provider.clone(), db, start, end).await?;
 
-        info!(
-            logs_found = stats.logs_found,
-            rows_written = stats.rows_written,
-            "chunk result"
-        );
+        info!(logs_found = stats.logs_found, rows_written = stats.rows_written, "chunk result");
 
         bar.inc(chunk_size_actual as u64);
         cur = end.saturating_add(1);
