@@ -10,6 +10,23 @@ use eyre::Result;
 use sqlx::PgPool;
 use tracing::info;
 
+#[derive(Clone, Debug)]
+pub struct StrategyConfig{
+    pub name: &'static str,
+    pub from_block: u64,
+    pub force_reindex: bool,
+}
+
+impl StrategyConfig {
+    pub fn new(name: &'static str, from_block: u64, force_reindex: bool) -> Self {
+        Self {
+            name,
+            from_block,
+            force_reindex,
+        }
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct Stats {
     pub logs_found: usize,
@@ -48,16 +65,19 @@ impl<P: Provider + Clone + Send + Sync + 'static, T: ChunkProcessor<P> + Send + 
         if !self.force_reindex {
             // Verificar si el rango ya está cubierto por la fila de la estrategia
             let row: Option<(i64, i64)> = sqlx::query_as(
-                "SELECT from_block, to_block FROM indexed_ranges WHERE strategy_name = $1"
+                "SELECT from_block, to_block FROM indexed_ranges WHERE strategy_name = $1",
             )
             .bind(self.strategy_name)
             .fetch_optional(db)
             .await?;
-            
+
             if let Some((db_from, db_to)) = row {
                 if (from as i64) >= db_from && (to as i64) <= db_to {
                     info!(
-                        from, to, db_from, db_to,
+                        from,
+                        to,
+                        db_from,
+                        db_to,
                         strategy = self.strategy_name,
                         "range already indexed, skipping"
                     );
@@ -75,7 +95,7 @@ impl<P: Provider + Clone + Send + Sync + 'static, T: ChunkProcessor<P> + Send + 
              ON CONFLICT (strategy_name) DO UPDATE 
              SET from_block = LEAST(indexed_ranges.from_block, EXCLUDED.from_block),
                  to_block = GREATEST(indexed_ranges.to_block, EXCLUDED.to_block),
-                 last_updated = NOW()"
+                 last_updated = NOW()",
         )
         .bind(self.strategy_name)
         .bind(from as i64)
