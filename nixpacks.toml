@@ -5,9 +5,6 @@ cmds = ["cargo fetch"]
 env = { SQLX_OFFLINE = "true" }
 cmds = ["cargo build --release"]
 
-[start]
-cmd = "./target/release/superchain-indexer"
-
 [variables]
 SQLX_OFFLINE = "true"
 RUST_LOG = "trace"
