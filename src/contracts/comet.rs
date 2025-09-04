@@ -6,8 +6,15 @@ sol!(
 
         #[derive(Debug)]
         event Supply(
-            address indexed from, 
-            address indexed dst, 
+            address indexed from,
+            address indexed dst,
+            uint amount
+        );
+
+        #[derive(Debug)]
+        event Withdraw(
+            address indexed src,
+            address indexed to,
             uint amount
         );
 

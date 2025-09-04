@@ -1,12 +1,16 @@
 use std::collections::HashSet;
 
-use alloy::{eips::BlockNumberOrTag, primitives::address};
+use alloy::{eips::BlockNumberOrTag, primitives::address, rpc::types::Log};
+use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use eyre::Result;
+use futures_util::try_join;
 use sqlx::{PgPool, QueryBuilder, query_scalar};
-use async_trait::async_trait;
 
-use crate::{contracts::Comet, strategies::{Stats, ChunkProcessor}};
+use crate::{
+    contracts::Comet::{self, Supply, Withdraw},
+    strategies::{ChunkProcessor, Stats},
+};
 
 #[derive(Clone, Copy, Debug)]
 enum Direction {
@@ -22,10 +26,14 @@ impl Direction {
     }
 }
 
+const WETH: &str = "0x4200000000000000000000000000000000000006";
+
 pub struct VaultsTransactionsCompoundProcessor;
 
 #[async_trait]
-impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P> for VaultsTransactionsCompoundProcessor {
+impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P>
+    for VaultsTransactionsCompoundProcessor
+{
     async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
         process_vaults_transactions_chunk(provider, db, from, to).await
     }
@@ -46,22 +54,43 @@ where
     let t0 = std::time::Instant::now();
 
     tracing::info!(from = from, to = to, "processing event range");
-
-    let logs = contract
+    let supply_filter = contract
         .Supply_filter()
         .from_block(BlockNumberOrTag::Number(from.into()))
-        .to_block(BlockNumberOrTag::Number(to.into()))
-        .query()
-        .await?;
+        .to_block(BlockNumberOrTag::Number(to.into()));
+    let withdraw_filter = contract
+        .Withdraw_filter()
+        .from_block(BlockNumberOrTag::Number(from.into()))
+        .to_block(BlockNumberOrTag::Number(to.into()));
 
-    if logs.is_empty() {
+    let (supply_logs, withdraw_logs) = try_join!(supply_filter.query(), withdraw_filter.query(),)?;
+
+    enum Event {
+        Supply(Supply, Log),
+        Withdraw(Withdraw, Log),
+    }
+
+    let all_logs: Vec<Event> = supply_logs
+        .into_iter()
+        .map(|(ev, log)| Event::Supply(ev, log.into()))
+        .chain(
+            withdraw_logs
+                .into_iter()
+                .map(|(ev, log)| Event::Withdraw(ev, log.into())),
+        )
+        .collect();
+
+    if all_logs.is_empty() {
         tracing::info!(from = from, to = to, "no logs found in range");
         return Ok(Stats::default());
     }
 
-    let mut dsts: Vec<String> = logs
+    let mut dsts: Vec<String> = all_logs
         .iter()
-        .map(|(ev, _)| format!("{:#x}", ev.dst).to_lowercase())
+        .map(|event| match event {
+            Event::Supply(ev, _) => format!("{:#x}", ev.dst).to_lowercase(),
+            Event::Withdraw(ev, _) => format!("{:#x}", ev.src).to_lowercase(),
+        })
         .collect();
     dsts.sort_unstable();
     dsts.dedup();
@@ -78,11 +107,17 @@ where
 
     let existing_set: HashSet<String> = existing.into_iter().map(|s| s.to_lowercase()).collect();
 
-    let filtered_logs: Vec<_> = logs
+    let filtered_logs: Vec<_> = all_logs
         .into_iter()
-        .filter(|(ev, _)| {
-            let d = format!("{:#x}", ev.dst).to_lowercase();
-            existing_set.contains(&d)
+        .filter(|event| match event {
+            Event::Supply(ev, _) => {
+                let d = format!("{:#x}", ev.dst).to_lowercase();
+                existing_set.contains(&d)
+            }
+            Event::Withdraw(ev, _) => {
+                let d = format!("{:#x}", ev.src).to_lowercase();
+                existing_set.contains(&d)
+            }
         })
         .collect();
 
@@ -103,18 +138,32 @@ where
 
     let mut rows: Vec<Row> = Vec::with_capacity(filtered_logs.len());
 
-    for (event, raw_log) in filtered_logs {
+    for event in filtered_logs {
+        let (direction, account_hex, amount, log) = match event {
+            Event::Supply(ev, log) => (
+                Direction::In,
+                ev.dst.to_string(),
+                ev.amount.to_string(),
+                log,
+            ),
+            Event::Withdraw(ev, log) => (
+                Direction::Out,
+                ev.src.to_string(),
+                ev.amount.to_string(),
+                log,
+            ),
+        };
         rows.push(Row {
-            account_hex: event.from.to_string(),
-            token_hex: "0x4200000000000000000000000000000000000006".to_string(), // WETH
-            amount: event.amount.to_string().parse()?,
-            direction: Direction::In.into(),
-            txhash_hex: raw_log
+            account_hex,
+            token_hex: WETH.to_string(),
+            amount: amount.parse()?,
+            direction,
+            txhash_hex: log
                 .transaction_hash
                 .map(|h| format!("{:#x}", h))
                 .unwrap_or_default(),
-            txblock: raw_log.block_number.map(|b| b as i64).unwrap_or_default(),
-            block_time: raw_log
+            txblock: log.block_number.map(|b| b as i64).unwrap_or_default(),
+            block_time: log
                 .block_timestamp
                 .map(|ts| Utc.timestamp_opt(ts as i64, 0).unwrap())
                 .unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap()),

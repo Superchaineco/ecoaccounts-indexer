@@ -28,7 +28,7 @@ async fn main() -> Result<()> {
     let rpc_url = env::var("RPC_URL")?;
     let strategies = vec![
         strategies::StrategyConfig::new("super_account_created", 125901332, false),
-        strategies::StrategyConfig::new("vaults_transactions_compound", 125901332, false),
+        strategies::StrategyConfig::new("vaults_transactions_compound", 135800000, false),
     ];
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;
 
