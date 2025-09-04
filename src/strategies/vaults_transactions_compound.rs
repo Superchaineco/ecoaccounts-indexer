@@ -63,7 +63,7 @@ where
         .from_block(BlockNumberOrTag::Number(from.into()))
         .to_block(BlockNumberOrTag::Number(to.into()));
 
-    let (supply_logs, withdraw_logs) = try_join!(supply_filter.query(), withdraw_filter.query(),)?;
+    let (supply_logs, withdraw_logs) = try_join!(supply_filter.query(), withdraw_filter.query())?;
 
     enum Event {
         Supply(Supply, Log),
@@ -72,11 +72,11 @@ where
 
     let all_logs: Vec<Event> = supply_logs
         .into_iter()
-        .map(|(ev, log)| Event::Supply(ev, log.into()))
+        .map(|(ev, log)| Event::Supply(ev, log))
         .chain(
             withdraw_logs
                 .into_iter()
-                .map(|(ev, log)| Event::Withdraw(ev, log.into())),
+                .map(|(ev, log)| Event::Withdraw(ev, log)),
         )
         .collect();
 
