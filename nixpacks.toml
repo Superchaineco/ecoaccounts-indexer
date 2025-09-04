@@ -5,7 +5,7 @@ cmds = ["cargo fetch"]
 env = { SQLX_OFFLINE = "true" }
 cmds = ["cargo build --release"]
 
-[phases.start]
+[start]
 cmd = "./target/release/superchain-indexer"
 
 [variables]
