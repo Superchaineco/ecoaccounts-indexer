@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = ["openssl", "pkg-config", "cacert"]
+
+[phases.install]
+cmds = ["cargo fetch"]
+
+[phases.build]
+env = { SQLX_OFFLINE = "true" }
+cmds = ["cargo build --release"]
+
+[phases.start]
+cmd = "./target/release/superchain-indexer"
+
+[variables]
+# También en runtime (por si acaso)
+SQLX_OFFLINE = "true"
+RUST_LOG = "trace"
