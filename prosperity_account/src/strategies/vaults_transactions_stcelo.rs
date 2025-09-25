@@ -149,13 +149,13 @@ where
         let (direction, account_hex, amount, log) = match event {
             Event::Deposit(ev, log) => (
                 Direction::In,
-                ev.from.to_string(),
+                ev.to.to_string(),
                 ev.value.to_string(),
                 log,
             ),
             Event::Withdraw(ev, log) => (
                 Direction::Out,
-                ev.to.to_string(),
+                ev.from.to_string(),
                 ev.value.to_string(),
                 log,
             ),
@@ -176,7 +176,7 @@ where
                 .unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap()),
         })
     }
-    let mut qb = QueryBuilder::new(
+    let mut qb: QueryBuilder<'_, sqlx::Postgres> = QueryBuilder::new(
         "INSERT INTO vaults_transactions (
             account, token, amount, direction, tx_hash, tx_block, block_time
         ) ",
