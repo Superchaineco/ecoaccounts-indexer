@@ -29,7 +29,7 @@ pub async fn process_super_account_created_chunk<P>(
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let super_chain_module_addr: Address = address!("0x1Ee397850c3CA629d965453B3cF102E9A8806Ded");
+    let super_chain_module_addr: Address = address!("0x58f5805b5072C3Dd157805132714E1dF40E79c66");
     let contract = SuperChainModule::new(super_chain_module_addr, provider.clone());
     let t0 = std::time::Instant::now();
 
@@ -92,7 +92,7 @@ where
     }
 
     let mut qb = QueryBuilder::new(
-        "INSERT INTO super_accounts (
+        "INSERT INTO prosperity_account (
             account, nationality, username, eoas, level,
             noun, total_points, total_badges,
             last_update_block_number, last_update_tx_hash

@@ -1,6 +1,6 @@
 use crate::strategies::{
     ChunkProcessor, IndexedRangeDecorator, Stats, StrategyConfig, SuperAccountCreatedProcessor,
-    VaultsTransactionsCompoundProcessor,
+    // VaultsTransactionsCompoundProcessor,
 };
 use alloy::providers::Provider;
 use eyre::{Result, ensure};
@@ -71,9 +71,17 @@ where
                             );
                             processor.process(provider, &db, start, end).await
                         }
-                        "vaults_transactions_compound" => {
+                        // "vaults_transactions_compound" => {
+                        //     let processor = IndexedRangeDecorator::new(
+                        //         VaultsTransactionsCompoundProcessor,
+                        //         config.name,
+                        //         config.force_reindex,
+                        //     );
+                        //     processor.process(provider, &db, start, end).await
+                        // }
+                        "vaults_transactions_stcelo" => {
                             let processor = IndexedRangeDecorator::new(
-                                VaultsTransactionsCompoundProcessor,
+                                crate::strategies::VaultsTransactionsStCeloManager,
                                 config.name,
                                 config.force_reindex,
                             );

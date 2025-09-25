@@ -1,8 +1,10 @@
 mod super_account_created;
-mod vaults_transactions_compound;
+// mod vaults_transactions_compound;
+mod vaults_transactions_stcelo;
 
 pub use super_account_created::SuperAccountCreatedProcessor;
-pub use vaults_transactions_compound::VaultsTransactionsCompoundProcessor;
+// pub use vaults_transactions_compound::VaultsTransactionsCompoundProcessor;
+pub use vaults_transactions_stcelo::VaultsTransactionsStCeloManager;
 
 use alloy::providers::Provider;
 use async_trait::async_trait;

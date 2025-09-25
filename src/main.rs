@@ -27,14 +27,16 @@ async fn main() -> Result<()> {
 
     let rpc_url = env::var("RPC_URL")?;
     let strategies = vec![
-        strategies::StrategyConfig::new("super_account_created", 125901332, false),
-        strategies::StrategyConfig::new("vaults_transactions_compound", 139800000, false),
+        strategies::StrategyConfig::new("super_account_created", 34050000, true),
+        // strategies::StrategyConfig::new("vaults_transactions_compound", 139800000, false),
+        strategies::StrategyConfig::new("vaults_transactions_stcelo", 34050000, true),
+            
     ];
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;
 
     info!(rpc_url = %rpc_url, strategies = ?strategies, "launching indexer");
 
-    run_indexer_and_follow(provider, &db, strategies, 100_000, 4, 5).await?;
+    run_indexer_and_follow(provider, &db, strategies, 10_000, 4, 5).await?;
 
     Ok(())
 }
