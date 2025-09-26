@@ -74,7 +74,7 @@ where
         .Transfer_filter()
         .from_block(BlockNumberOrTag::Number(from.into()))
         .to_block(BlockNumberOrTag::Number(to.into()))
-        .topic1(address!("0xeA280B39437a64473a0C77949759E6629eD1Dc73"));
+        .topic2(address!("0xeA280B39437a64473a0C77949759E6629eD1Dc73"));
 
     let (supply_logs, withdraw_logs) = try_join!(supply_filter.query(), withdraw_filter.query())?;
 
