@@ -4,19 +4,43 @@ use eyre::Result;
 use sqlx::PgPool;
 use tracing::info;
 
-#[derive(Clone, Debug)]
-pub struct StrategyConfig{
+pub struct StrategyConfig<P>
+where
+    P: Provider + Clone + Send + Sync + 'static,
+{
+    pub processor: Box<dyn ChunkProcessor<P> + Send + Sync>,
     pub name: &'static str,
     pub from_block: u64,
     pub force_reindex: bool,
 }
 
-impl StrategyConfig {
-    pub fn new(name: &'static str, from_block: u64, force_reindex: bool) -> Self {
+impl<P> StrategyConfig<P>
+where
+    P: Provider + Clone + Send + Sync + 'static,
+{
+    pub fn new<T>(processor: T, name: &'static str, from_block: u64, force_reindex: bool) -> Self
+    where
+        T: ChunkProcessor<P> + Send + Sync + 'static,
+    {
         Self {
+            processor: Box::new(processor),
             name,
             from_block,
             force_reindex,
+        }
+    }
+}
+
+impl<P> Clone for StrategyConfig<P>
+where
+    P: Provider + Clone + Send + Sync + 'static,
+{
+    fn clone(&self) -> Self {
+        Self {
+            processor: self.processor.clone(),
+            name: self.name,
+            from_block: self.from_block,
+            force_reindex: self.force_reindex,
         }
     }
 }
@@ -31,29 +55,44 @@ pub struct Stats {
 }
 
 #[async_trait]
-pub trait ChunkProcessor<P: Provider + Clone + Send + Sync + 'static> {
+pub trait ChunkProcessor<P: Provider + Clone + Send + Sync + 'static>: Send + Sync {
     async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats>;
+
+    fn box_clone(&self) -> Box<dyn ChunkProcessor<P> + Send + Sync>;
 }
 
-pub struct IndexedRangeDecorator<T> {
-    inner: T,
+impl<P> Clone for Box<dyn ChunkProcessor<P> + Send + Sync>
+where
+    P: Provider + Clone + Send + Sync + 'static,
+{
+    fn clone(&self) -> Box<dyn ChunkProcessor<P> + Send + Sync> {
+        self.box_clone()
+    }
+}
+
+#[derive(Clone)]
+pub struct IndexedRangeDecorator<P>
+where
+    P: Provider + Clone + Send + Sync + 'static,
+{
+    inner: Box<dyn ChunkProcessor<P> + Send + Sync>,
     strategy_name: &'static str,
     force_reindex: bool,
 }
 
-impl<T> IndexedRangeDecorator<T> {
-    pub fn new(inner: T, strategy_name: &'static str, force_reindex: bool) -> Self {
-        Self {
-            inner,
-            strategy_name,
-            force_reindex,
-        }
+impl<P> IndexedRangeDecorator<P>
+where
+    P: Provider + Clone + Send + Sync + 'static,
+{
+    pub fn new(inner: Box<dyn ChunkProcessor<P> + Send + Sync>, strategy_name: &'static str, force_reindex: bool) -> Self {
+        Self { inner, strategy_name, force_reindex }
     }
 }
 
 #[async_trait]
-impl<P: Provider + Clone + Send + Sync + 'static, T: ChunkProcessor<P> + Send + Sync>
-    ChunkProcessor<P> for IndexedRangeDecorator<T>
+impl<P> ChunkProcessor<P> for IndexedRangeDecorator<P>
+where
+    P: Provider + Clone + Send + Sync + 'static,
 {
     async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
         if !self.force_reindex {
@@ -80,6 +119,7 @@ impl<P: Provider + Clone + Send + Sync + 'static, T: ChunkProcessor<P> + Send + 
             }
         }
 
+        // Delegate to inner processor
         let result = self.inner.process(provider, db, from, to).await?;
 
         // Actualizar/insertar la fila con el rango acumulado
@@ -98,5 +138,13 @@ impl<P: Provider + Clone + Send + Sync + 'static, T: ChunkProcessor<P> + Send + 
         .await?;
 
         Ok(result)
+    }
+
+    fn box_clone(&self) -> Box<dyn ChunkProcessor<P> + Send + Sync> {
+        Box::new(Self {
+            inner: self.inner.clone(),
+            strategy_name: self.strategy_name,
+            force_reindex: self.force_reindex,
+        })
     }
 }

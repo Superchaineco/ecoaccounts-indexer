@@ -10,10 +10,10 @@ use chrono::{TimeZone, Utc};
 use eyre::Result;
 use futures_util::try_join;
 use sqlx::{PgPool, QueryBuilder, query_scalar};
+use core::strategies::{ChunkProcessor, Stats};
 
 use crate::{
     contracts::StCelo::{self, Transfer},
-    strategies::{ChunkProcessor, Stats},
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -32,14 +32,19 @@ impl Direction {
 
 const ST_CELO_ADDRESS: &str = "0xC668583dcbDc9ae6FA3CE46462758188adfdfC24";
 
-pub struct VaultsTransactionsStCeloManager;
+#[derive(Clone)]
+pub struct VaultsTransactionsStCeloManagerProcessor;
 
 #[async_trait]
 impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P>
-    for VaultsTransactionsStCeloManager
+    for VaultsTransactionsStCeloManagerProcessor
 {
     async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
         process_vaults_transactions_chunk(provider, db, from, to).await
+    }
+
+    fn box_clone(&self) -> Box<dyn ChunkProcessor<P> + Send + Sync> {
+        Box::new(self.clone())
     }
 }
 

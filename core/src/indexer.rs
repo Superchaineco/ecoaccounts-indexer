@@ -1,5 +1,5 @@
 use crate::strategies::{
-    ChunkProcessor, IndexedRangeDecorator, Stats, StrategyConfig, SuperAccountCreatedProcessor,
+    ChunkProcessor, IndexedRangeDecorator, Stats, StrategyConfig
     // VaultsTransactionsCompoundProcessor,
 };
 use alloy::providers::Provider;
@@ -15,7 +15,7 @@ pub async fn run_indexer<P>(
     from_block: u64,
     to_block: u64,
     chunk_size: u64,
-    strategies: Vec<StrategyConfig>,
+    strategies: Vec<StrategyConfig<P>>,
 ) -> Result<()>
 where
     P: Provider + Clone + Send + Sync + 'static,
@@ -61,34 +61,13 @@ where
                     if start.max(config.from_block) > end {
                         return Ok(Stats::default());
                     }
+                    let processor = IndexedRangeDecorator::new(
+                        config.processor.clone(),
+                        config.name,
+                        config.force_reindex,
+                    );
 
-                    match config.name {
-                        "super_account_created" => {
-                            let processor = IndexedRangeDecorator::new(
-                                SuperAccountCreatedProcessor,
-                                config.name,
-                                config.force_reindex,
-                            );
-                            processor.process(provider, &db, start, end).await
-                        }
-                        // "vaults_transactions_compound" => {
-                        //     let processor = IndexedRangeDecorator::new(
-                        //         VaultsTransactionsCompoundProcessor,
-                        //         config.name,
-                        //         config.force_reindex,
-                        //     );
-                        //     processor.process(provider, &db, start, end).await
-                        // }
-                        "vaults_transactions_stcelo" => {
-                            let processor = IndexedRangeDecorator::new(
-                                crate::strategies::VaultsTransactionsStCeloManager,
-                                config.name,
-                                config.force_reindex,
-                            );
-                            processor.process(provider, &db, start, end).await
-                        }
-                        _ => Err(eyre::eyre!("Unknown strategy: {}", config.name)),
-                    }
+                    processor.process(provider, &db, start, end).await
                 })
             })
             .collect();
@@ -116,7 +95,7 @@ where
 pub async fn run_indexer_and_follow<P>(
     http_provider: P,
     db: &PgPool,
-    strategies: Vec<StrategyConfig>,
+    strategies: Vec<StrategyConfig<P>>,
     chunk_size: u64,
     confirmations: u64,
     poll_interval_secs: u64,

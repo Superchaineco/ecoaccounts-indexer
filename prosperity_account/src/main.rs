@@ -3,12 +3,17 @@ mod strategies;
 
 use std::env;
 
-use alloy::{providers::ProviderBuilder};
+use alloy::providers::ProviderBuilder;
 use core::db::connect_db;
+use core::indexer;
+use core::strategies::StrategyConfig;
 use dotenv::dotenv;
 use eyre::Result;
 
 use crate::indexer::run_indexer_and_follow;
+use crate::strategies::{
+    ProsperityAccountCreatedProcessor, VaultsTransactionsStCeloManagerProcessor,
+};
 use tracing::info;
 
 #[tokio::main]
@@ -25,15 +30,24 @@ async fn main() -> Result<()> {
 
     let rpc_url = env::var("RPC_URL")?;
     let strategies = vec![
-        strategies::StrategyConfig::new("super_account_created", 34050000, true),
-        strategies::StrategyConfig::new("vaults_transactions_stcelo", 34050000, true),
-            
+        StrategyConfig::new(
+            Box::new(ProsperityAccountCreatedProcessor::new()),
+            "prosperity_account_created",
+            34050000,
+            true,
+        ),
+        StrategyConfig::new(
+            Box::new(VaultsTransactionsStCeloManagerProcessor::new()),
+            "vaults_transactions_stcelo",
+            34050000,
+            true,
+        ),
     ];
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;
 
     info!(rpc_url = %rpc_url, strategies = ?strategies, "launching indexer");
 
-    run_indexer_and_follow(provider, &db, strategies, 10_000, 4, 5).await?;
+    run_indexer_and_follow(provider, &db, strategies, 100_000, 4, 5).await?;
 
     Ok(())
 }
