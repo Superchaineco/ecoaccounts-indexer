@@ -4,11 +4,11 @@ mod strategies;
 use std::env;
 
 use alloy::providers::ProviderBuilder;
-use core::db::connect_db;
-use core::indexer;
-use core::strategies::StrategyConfig;
 use dotenv::dotenv;
 use eyre::Result;
+use indexer_core::db::connect_db;
+use indexer_core::indexer;
+use indexer_core::strategies::StrategyConfig;
 
 use crate::indexer::run_indexer_and_follow;
 use crate::strategies::{
@@ -31,13 +31,13 @@ async fn main() -> Result<()> {
     let rpc_url = env::var("RPC_URL")?;
     let strategies = vec![
         StrategyConfig::new(
-            Box::new(ProsperityAccountCreatedProcessor::new()),
+            *Box::new(ProsperityAccountCreatedProcessor),
             "prosperity_account_created",
             34050000,
             true,
         ),
         StrategyConfig::new(
-            Box::new(VaultsTransactionsStCeloManagerProcessor::new()),
+            *Box::new(VaultsTransactionsStCeloManagerProcessor),
             "vaults_transactions_stcelo",
             34050000,
             true,

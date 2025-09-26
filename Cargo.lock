@@ -1335,25 +1335,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "core"
-version = "0.1.0"
-dependencies = [
- "alloy",
- "async-trait",
- "chrono",
- "dotenv",
- "eyre",
- "futures-util",
- "indicatif",
- "serde",
- "serde_json",
- "sqlx",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2355,6 +2336,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "964de6e86d545b246d84badc0fef527924ace5134f30641c203ef52ba83f58d5"
 
 [[package]]
+name = "indexer_core"
+version = "0.1.0"
+dependencies = [
+ "alloy",
+ "async-trait",
+ "chrono",
+ "dotenv",
+ "eyre",
+ "futures-util",
+ "indicatif",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "indexmap"
 version = "1.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3064,10 +3064,10 @@ dependencies = [
  "alloy",
  "async-trait",
  "chrono",
- "core",
  "dotenv",
  "eyre",
  "futures-util",
+ "indexer_core",
  "serde",
  "serde_json",
  "sqlx",
@@ -4144,12 +4144,16 @@ name = "super_accounts"
 version = "0.1.0"
 dependencies = [
  "alloy",
+ "async-trait",
  "chrono",
- "core",
  "dotenv",
  "eyre",
+ "futures-util",
+ "indexer_core",
+ "indicatif",
  "serde",
  "serde_json",
+ "sqlx",
  "tokio",
  "tracing",
  "tracing-subscriber",

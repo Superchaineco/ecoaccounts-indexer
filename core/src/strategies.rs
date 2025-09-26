@@ -1,3 +1,5 @@
+use std::fmt::Debug;
+
 use alloy::providers::Provider;
 use async_trait::async_trait;
 use eyre::Result;
@@ -45,6 +47,19 @@ where
     }
 }
 
+impl<P> Debug for StrategyConfig<P>
+where
+    P: Provider + Clone + Send + Sync + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StrategyConfig")
+            .field("name", &self.name)
+            .field("from_block", &self.from_block)
+            .field("force_reindex", &self.force_reindex)
+            .finish()
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct Stats {
     pub logs_found: usize,
@@ -84,8 +99,16 @@ impl<P> IndexedRangeDecorator<P>
 where
     P: Provider + Clone + Send + Sync + 'static,
 {
-    pub fn new(inner: Box<dyn ChunkProcessor<P> + Send + Sync>, strategy_name: &'static str, force_reindex: bool) -> Self {
-        Self { inner, strategy_name, force_reindex }
+    pub fn new(
+        inner: Box<dyn ChunkProcessor<P> + Send + Sync>,
+        strategy_name: &'static str,
+        force_reindex: bool,
+    ) -> Self {
+        Self {
+            inner,
+            strategy_name,
+            force_reindex,
+        }
     }
 }
 

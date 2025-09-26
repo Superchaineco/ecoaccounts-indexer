@@ -5,12 +5,10 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use eyre::Result;
 use futures_util::try_join;
+use indexer_core::strategies::{ChunkProcessor, Stats};
 use sqlx::{PgPool, QueryBuilder, query_scalar};
 
-use crate::{
-    contracts::Comet::{self, Supply, Withdraw},
-    strategies::{ChunkProcessor, Stats},
-};
+use crate::contracts::Comet::{self, Supply, Withdraw};
 
 #[derive(Clone, Copy, Debug)]
 enum Direction {
@@ -28,6 +26,7 @@ impl Direction {
 
 const WETH: &str = "0x4200000000000000000000000000000000000006";
 
+#[derive(Clone)]
 pub struct VaultsTransactionsCompoundProcessor;
 
 #[async_trait]
@@ -36,6 +35,10 @@ impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcess
 {
     async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
         process_vaults_transactions_chunk(provider, db, from, to).await
+    }
+
+    fn box_clone(&self) -> Box<dyn ChunkProcessor<P> + Send + Sync> {
+        Box::new(self.clone())
     }
 }
 

@@ -10,7 +10,7 @@ use chrono::{TimeZone, Utc};
 use eyre::Result;
 use futures_util::try_join;
 use sqlx::{PgPool, QueryBuilder, query_scalar};
-use core::strategies::{ChunkProcessor, Stats};
+use indexer_core::strategies::{ChunkProcessor, Stats};
 
 use crate::{
     contracts::StCelo::{self, Transfer},
@@ -34,6 +34,7 @@ const ST_CELO_ADDRESS: &str = "0xC668583dcbDc9ae6FA3CE46462758188adfdfC24";
 
 #[derive(Clone)]
 pub struct VaultsTransactionsStCeloManagerProcessor;
+
 
 #[async_trait]
 impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P>

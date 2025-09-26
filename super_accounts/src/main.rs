@@ -4,14 +4,14 @@ mod strategies;
 use std::env;
 
 use alloy::providers::ProviderBuilder;
-use core::db::connect_db;
-use core::indexer;
-use core::strategies::StrategyConfig;
+use indexer_core::db::connect_db;
+use indexer_core::indexer;
+use indexer_core::strategies::StrategyConfig;
 use dotenv::dotenv;
 use eyre::Result;
 
 use crate::indexer::run_indexer_and_follow;
-use crate::strategies::SuperAccountCreatedProcessor;
+use crate::strategies::{SuperAccountCreatedProcessor, VaultsTransactionsCompoundProcessor};
 
 use tracing::info;
 
@@ -30,13 +30,13 @@ async fn main() -> Result<()> {
     let rpc_url = env::var("RPC_URL")?;
     let strategies = vec![
         StrategyConfig::new(
-            Box::new(SuperAccountCreatedProcessor::new()),
+            *Box::new(SuperAccountCreatedProcessor),
             "super_account_created",
             34050000,
             true,
         ),
         StrategyConfig::new(
-            Box::new(VaultsTransactionsCompoundProcessor::new()),
+            *Box::new(VaultsTransactionsCompoundProcessor),
             "vaults_transactions_compound",
             34050000,
             true,

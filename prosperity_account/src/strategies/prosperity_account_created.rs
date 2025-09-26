@@ -8,12 +8,14 @@ use eyre::{Ok, Result};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder};
 use async_trait::async_trait;
-use core::strategies::{Stats, ChunkProcessor};
+use indexer_core::strategies::{Stats, ChunkProcessor};
 
-use crate::{contracts::SuperChainModule};
+use crate::contracts::SuperChainModule;
+
 
 #[derive(Clone)]
 pub struct ProsperityAccountCreatedProcessor;
+
 
 #[async_trait]
 impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P> for ProsperityAccountCreatedProcessor {

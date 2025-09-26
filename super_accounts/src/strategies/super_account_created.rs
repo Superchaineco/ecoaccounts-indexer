@@ -4,19 +4,27 @@ use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, address},
 };
+use async_trait::async_trait;
 use eyre::{Ok, Result};
+use indexer_core::strategies::{ChunkProcessor, Stats};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder};
-use async_trait::async_trait;
 
-use crate::{contracts::SuperChainModule, strategies::{Stats, ChunkProcessor}};
+use crate::contracts::SuperChainModule;
 
+#[derive(Clone)]
 pub struct SuperAccountCreatedProcessor;
 
 #[async_trait]
-impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P> for SuperAccountCreatedProcessor {
+impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P>
+    for SuperAccountCreatedProcessor
+{
     async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
         process_super_account_created_chunk(provider, db, from, to).await
+    }
+
+    fn box_clone(&self) -> Box<dyn ChunkProcessor<P> + Send + Sync> {
+        Box::new(self.clone())
     }
 }
 

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-core = { path = "../core" }
+indexer_core = { path = "../core" }
 alloy = { version = "1.0.25", features = ["full"] }
 tokio = { version = "1.47.1", features = ["full"] }
 tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
