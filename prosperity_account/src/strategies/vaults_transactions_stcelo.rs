@@ -110,7 +110,7 @@ where
 
     // 2) Pide a la DB cuáles 'dst' existen como super_accounts.account
     let existing: Vec<String> = query_scalar_unchecked!(
-        r#"SELECT account FROM super_accounts WHERE lower(account) = ANY($1::text[])"#,
+        r#"SELECT account FROM users WHERE lower(account) = ANY($1::text[])"#,
         &dsts
     )
     .fetch_all(db)
