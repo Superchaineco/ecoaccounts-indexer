@@ -39,7 +39,7 @@ async fn main() -> Result<()> {
         StrategyConfig::new(
             *Box::new(VaultsTransactionsStCeloManagerProcessor),
             "vaults_transactions_stcelo",
-            34050000,
+            34050000SQLX_OFFLINE,
             false,
         ),
     ];

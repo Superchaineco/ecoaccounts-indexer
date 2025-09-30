@@ -3,10 +3,3 @@ nixPkgs = ["binutils", "gcc", "rust-bin.stable.latest.default"]
 
 [phases.install]
 cmds = ["cargo fetch"]
-
-[phases.build]
-env = { SQLX_OFFLINE = "true" }
-
-[variables]
-SQLX_OFFLINE = "true"
-RUST_LOG = "trace"
