@@ -7,5 +7,6 @@ cmds = ["cargo fetch"]
 [phases.build]
 env = { SQLX_OFFLINE = "true" }
 
+[variables]
 SQLX_OFFLINE = "true"
 RUST_LOG = "trace"
