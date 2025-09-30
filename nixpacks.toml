@@ -6,8 +6,14 @@ cmds = ["cargo fetch"]
 
 [phases.build]
 env = { SQLX_OFFLINE = "true" }
-cmds = ["mkdir -p bin","cargo build --release", "cp target/release/superchain-indexer bin"]
+cmds = [
+    "mkdir -p bin",
+    '''
+    echo "Building package: $PACKAGE_NAME"
+    cargo build --release -p $PACKAGE_NAME
+    cp target/release/$PACKAGE_NAME bin/
+    '''
+]
 
-[variables]
 SQLX_OFFLINE = "true"
 RUST_LOG = "trace"
