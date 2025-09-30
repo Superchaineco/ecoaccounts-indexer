@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use eyre::Result;
 use futures_util::try_join;
-use sqlx::{PgPool, QueryBuilder, query_scalar};
+use sqlx::{PgPool, QueryBuilder, query_scalar_unchecked};
 use indexer_core::strategies::{ChunkProcessor, Stats};
 
 use crate::{
@@ -109,8 +109,8 @@ where
     dsts.dedup();
 
     // 2) Pide a la DB cuáles 'dst' existen como super_accounts.account
-    let existing: Vec<String> = query_scalar!(
-        r#"SELECT account FROM users WHERE lower(account) = ANY($1::text[])"#,
+    let existing: Vec<String> = query_scalar_unchecked!(
+        r#"SELECT account FROM super_accounts WHERE lower(account) = ANY($1::text[])"#,
         &dsts
     )
     .fetch_all(db)

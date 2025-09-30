@@ -6,7 +6,7 @@ use chrono::{TimeZone, Utc};
 use eyre::Result;
 use futures_util::try_join;
 use indexer_core::strategies::{ChunkProcessor, Stats};
-use sqlx::{PgPool, QueryBuilder, query_scalar};
+use sqlx::{PgPool, QueryBuilder, query_scalar_unchecked};
 
 use crate::contracts::Comet::{self, Supply, Withdraw};
 
@@ -99,7 +99,7 @@ where
     dsts.dedup();
 
     // 2) Pide a la DB cuáles 'dst' existen como super_accounts.account
-    let existing: Vec<String> = query_scalar!(
+    let existing: Vec<String> = query_scalar_unchecked!(
         r#"SELECT account FROM super_accounts WHERE lower(account) = ANY($1::text[])"#,
         &dsts
     )
