@@ -78,7 +78,7 @@ where
                 Ok(Ok(stats)) => {
                     info!(strategy = ?stats, logs_found = stats.logs_found, rows_written = stats.rows_written, "strategy completed")
                 }
-                Ok(Err(e)) => error!("Strategy failed: {}", e),
+                Ok(Err(e)) => error!("Strategy failed: {} {}", e),
                 Err(e) => error!("Task panicked: {}", e),
             }
         }

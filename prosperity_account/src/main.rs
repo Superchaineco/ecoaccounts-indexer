@@ -34,13 +34,13 @@ async fn main() -> Result<()> {
             *Box::new(ProsperityAccountCreatedProcessor),
             "prosperity_account_created",
             34050000,
-            true,
+            false,
         ),
         StrategyConfig::new(
             *Box::new(VaultsTransactionsStCeloManagerProcessor),
             "vaults_transactions_stcelo",
             34050000,
-            true,
+            false,
         ),
     ];
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;

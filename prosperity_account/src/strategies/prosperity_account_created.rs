@@ -100,7 +100,7 @@ where
     }
 
     let mut qb = QueryBuilder::new(
-        "INSERT INTO prosperity_account (
+        "INSERT INTO users (
             account, nationality, username, eoas, level,
             noun, total_points, total_badges,
             last_update_block_number, last_update_tx_hash
