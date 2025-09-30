@@ -1,6 +1,8 @@
 use crate::strategies::{
-    ChunkProcessor, IndexedRangeDecorator, Stats, StrategyConfig
-    // VaultsTransactionsCompoundProcessor,
+    ChunkProcessor,
+    IndexedRangeDecorator,
+    Stats,
+    StrategyConfig, // VaultsTransactionsCompoundProcessor,
 };
 use alloy::providers::Provider;
 use eyre::{Result, ensure};
@@ -57,7 +59,6 @@ where
                 let end = end;
                 let config = config.clone();
                 tokio::spawn(async move {
-
                     if start.max(config.from_block) > end {
                         return Ok(Stats::default());
                     }
@@ -78,7 +79,7 @@ where
                 Ok(Ok(stats)) => {
                     info!(strategy = ?stats, logs_found = stats.logs_found, rows_written = stats.rows_written, "strategy completed")
                 }
-                Ok(Err(e)) => error!("Strategy failed: {} {}", e),
+                Ok(Err(e)) => error!("Strategy failed: {}", e),
                 Err(e) => error!("Task panicked: {}", e),
             }
         }
