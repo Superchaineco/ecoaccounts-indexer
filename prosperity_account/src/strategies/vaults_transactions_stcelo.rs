@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, HashMap};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -139,6 +139,9 @@ where
         return Ok(Stats::default());
     }
 
+    // Cache simple para timestamps
+    let mut block_timestamps: HashMap<u64, chrono::DateTime<chrono::Utc>> = HashMap::new();
+
     struct Row {
         account_hex: String, // TEXT "0x..."
         token_hex: String,
@@ -176,10 +179,29 @@ where
                 .map(|h| format!("{:#x}", h))
                 .unwrap_or_default(),
             txblock: log.block_number.map(|b| b as i64).unwrap_or_default(),
-            block_time: log
-                .block_timestamp
-                .map(|ts| Utc.timestamp_opt(ts as i64, 0).unwrap())
-                .unwrap_or_else(|| Utc.timestamp_opt(0, 0).unwrap()),
+            block_time: {
+                if let Some(ts) = log.block_timestamp {
+                    Utc.timestamp_opt(ts as i64, 0).unwrap()
+                } else if let Some(block_num) = log.block_number {
+                    // Usar cache o fetch si no existe
+                    if let Some(&cached_time) = block_timestamps.get(&block_num) {
+                        cached_time
+                    } else {
+                        // Fetch block timestamp
+                        let timestamp = provider.get_block_by_number(BlockNumberOrTag::Number(block_num))
+                            .await
+                            .ok()
+                            .flatten()
+                            .map(|b| b.header.timestamp)
+                            .unwrap_or(0);
+                        let datetime = Utc.timestamp_opt(timestamp as i64, 0).unwrap();
+                        block_timestamps.insert(block_num, datetime);
+                        datetime
+                    }
+                } else {
+                    Utc.timestamp_opt(0, 0).unwrap()
+                }
+            },
         })
     }
     let mut qb: QueryBuilder<'_, sqlx::Postgres> = QueryBuilder::new(
