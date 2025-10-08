@@ -4,11 +4,12 @@ mod strategies;
 use std::env;
 
 use alloy::providers::ProviderBuilder;
+use dotenv::dotenv;
+use eyre::Result;
 use indexer_core::db::connect_db;
 use indexer_core::indexer;
 use indexer_core::strategies::StrategyConfig;
-use dotenv::dotenv;
-use eyre::Result;
+use strategies::SuperChainBadgesMintedProccesor;
 
 use crate::indexer::run_indexer_and_follow;
 use crate::strategies::{SuperAccountCreatedProcessor, VaultsTransactionsCompoundProcessor};
@@ -33,12 +34,18 @@ async fn main() -> Result<()> {
             *Box::new(SuperAccountCreatedProcessor),
             "super_account_created",
             34050000,
-            true,
+            false,
         ),
         StrategyConfig::new(
             *Box::new(VaultsTransactionsCompoundProcessor),
             "vaults_transactions_compound",
             34050000,
+            false,
+        ),
+        StrategyConfig::new(
+            *Box::new(SuperChainBadgesMintedProccesor),
+            "badges_minted",
+            125901059,
             true,
         ),
     ];
