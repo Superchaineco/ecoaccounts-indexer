@@ -1,5 +1,6 @@
 mod contracts;
 mod strategies;
+mod config;
 
 use std::env;
 
@@ -33,14 +34,14 @@ async fn main() -> Result<()> {
         StrategyConfig::new(
             *Box::new(ProsperityAccountCreatedProcessor),
             "prosperity_account_created",
-            34050000,
-            false,
+            config::read_block("STRAT_PROSPERITY_ACCOUNT_CREATED_FROM", 34_050_000),
+            config::read_bool("STRAT_PROSPERITY_ACCOUNT_CREATED_REINDEX", false),
         ),
         StrategyConfig::new(
             *Box::new(VaultsTransactionsStCeloManagerProcessor),
             "vaults_transactions_stcelo",
-            34050000,
-            false,
+            config::read_block("STRAT_VAULTS_TRANSACTIONS_STCELO_FROM", 34_050_000),
+            config::read_bool("STRAT_VAULTS_TRANSACTIONS_STCELO_REINDEX", false),
         ),
     ];
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;

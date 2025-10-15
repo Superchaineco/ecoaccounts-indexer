@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::env;
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -11,6 +12,7 @@ use futures_util::future::try_join;
 use indexer_core::strategies::{ChunkProcessor, Stats};
 use sqlx::{PgPool, QueryBuilder};
 
+use crate::config::badges_addr;
 use crate::contracts::SuperChainBadges::{self, BadgeMinted, BadgeTierUpdated};
 
 #[derive(Clone)]
@@ -38,7 +40,7 @@ pub async fn process_super_account_created_chunk<P>(
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let super_chain_badges_addr: Address = address!("0x03e2c563cf77e3Cdc0b7663cEE117dA14ea60848");
+    let super_chain_badges_addr: Address = badges_addr();
     let contract = SuperChainBadges::new(super_chain_badges_addr, provider.clone());
     let t0 = std::time::Instant::now();
 

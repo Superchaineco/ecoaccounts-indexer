@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use std::env;
 
 use alloy::{eips::BlockNumberOrTag, primitives::address, rpc::types::Log};
 use async_trait::async_trait;
@@ -8,6 +9,7 @@ use futures_util::try_join;
 use indexer_core::strategies::{ChunkProcessor, Stats};
 use sqlx::{PgPool, QueryBuilder, query_scalar_unchecked};
 
+use crate::config::vaults_comet_addr;
 use crate::contracts::Comet::{self, Supply, Withdraw};
 
 #[derive(Clone, Copy, Debug)]
@@ -51,7 +53,7 @@ pub async fn process_vaults_transactions_chunk<P>(
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let comet_addr = address!("0xE36A30D249f7761327fd973001A32010b521b6Fd");
+    let comet_addr = vaults_comet_addr();
     let contract = Comet::new(comet_addr, provider.clone());
 
     let t0 = std::time::Instant::now();
