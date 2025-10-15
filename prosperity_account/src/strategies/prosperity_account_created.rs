@@ -11,6 +11,7 @@ use async_trait::async_trait;
 use indexer_core::strategies::{Stats, ChunkProcessor};
 
 use crate::contracts::SuperChainModule;
+use crate::config::super_account_module_addr;
 
 
 #[derive(Clone)]
@@ -37,7 +38,7 @@ pub async fn process_super_account_created_chunk<P>(
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let super_chain_module_addr: Address = address!("0x58f5805b5072C3Dd157805132714E1dF40E79c66");
+    let super_chain_module_addr: Address = super_account_module_addr();
     let contract = SuperChainModule::new(super_chain_module_addr, provider.clone());
     let t0 = std::time::Instant::now();
 

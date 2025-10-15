@@ -13,6 +13,7 @@ use sqlx::{PgPool, QueryBuilder, query_scalar_unchecked};
 use indexer_core::strategies::{ChunkProcessor, Stats};
 
 use crate::{
+    config::st_celo_addr,
     contracts::StCelo::{self, Transfer},
 };
 
@@ -29,8 +30,6 @@ impl Direction {
         }
     }
 }
-
-const ST_CELO_ADDRESS: &str = "0xC668583dcbDc9ae6FA3CE46462758188adfdfC24";
 
 #[derive(Clone)]
 pub struct VaultsTransactionsStCeloManagerProcessor;
@@ -58,7 +57,7 @@ pub async fn process_vaults_transactions_chunk<P>(
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let st_celo_contract = address!("0xC668583dcbDc9ae6FA3CE46462758188adfdfC24");
+    let st_celo_contract = st_celo_addr();
 
     let st_celo_manager_contract = StCelo::new(st_celo_contract, provider.clone());
 
