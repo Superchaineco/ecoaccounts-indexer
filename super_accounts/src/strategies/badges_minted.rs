@@ -118,36 +118,50 @@ where
         }
     }
 
-    let mut qb = QueryBuilder::new(
-        "INSERT INTO badge_claims (
-            badge_id, account, tier, points, block_number, tx_hash, claimed_at
-        ) ",
-    );
+    const MAX_PARAMS: usize = u16::MAX as usize;
+    const PARAMS_PER_ROW: usize = 7;
+    
+    const MAX_ROWS_PER_BATCH: usize = MAX_PARAMS / PARAMS_PER_ROW;
 
-    qb.push_values(rows.iter(), |mut b, r| {
-        b.push_bind(r.badge_id)
-            .push_bind(&r.account)
-            .push_bind(r.tier)
-            .push_bind(r.points)
-            .push_bind(r.block_number)
-            .push_bind(&r.tx_hash)
-            .push_bind(r.claimed_at);
-    });
-    qb.push(" ON CONFLICT (badge_id, tier, account, block_number) DO NOTHING");
+    let mut total_rows_written: u64 = 0;
 
-    let batch_res = qb.build().execute(db).await;
+    if !rows.is_empty() {
+        for chunk in rows.chunks(MAX_ROWS_PER_BATCH) {
+            let mut qb = QueryBuilder::new(
+                "INSERT INTO badge_claims (
+                    badge_id, account, tier, points, block_number, tx_hash, claimed_at
+                ) ",
+            );
+
+            qb.push_values(chunk.iter(), |mut b, r| {
+                b.push_bind(r.badge_id)
+                    .push_bind(&r.account)
+                    .push_bind(r.tier)
+                    .push_bind(r.points)
+                    .push_bind(r.block_number)
+                    .push_bind(&r.tx_hash)
+                    .push_bind(r.claimed_at);
+            });
+
+            qb.push(" ON CONFLICT (badge_id, tier, account, block_number) DO NOTHING");
+
+            let res = qb.build().execute(db).await?;
+            total_rows_written = total_rows_written.saturating_add(res.rows_affected());
+        }
+    }
+
     let took_ms = t0.elapsed().as_millis();
     tracing::info!(
         from = from,
         to = to,
         logs = rows.len(),
-        rows_written = batch_res.as_ref().map(|r| r.rows_affected()).unwrap_or(0),
+        rows_written = total_rows_written,
         took_ms,
         "chunk processed",
     );
     Ok(Stats {
         logs_found: rows.len(),
-        rows_written: batch_res?.rows_affected(),
+        rows_written: total_rows_written,
         from_block: from,
         to_block: to,
         took_ms,
