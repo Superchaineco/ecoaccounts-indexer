@@ -1,5 +1,6 @@
 mod contracts;
 mod strategies;
+mod config;
 
 use std::env;
 
@@ -29,24 +30,25 @@ async fn main() -> Result<()> {
     let db = connect_db().await?;
 
     let rpc_url = env::var("RPC_URL")?;
+
     let strategies = vec![
         StrategyConfig::new(
             *Box::new(SuperAccountCreatedProcessor),
             "super_account_created",
-            34050000,
-            false,
+            config::read_block("STRAT_SUPER_ACCOUNT_CREATED_FROM", 34_050_000),
+            config::read_bool("STRAT_SUPER_ACCOUNT_CREATED_REINDEX", false),
         ),
         StrategyConfig::new(
             *Box::new(VaultsTransactionsCompoundProcessor),
             "vaults_transactions_compound",
-            34050000,
-            false,
+            config::read_block("STRAT_VAULTS_TRANSACTIONS_COMPOUND_FROM", 34_050_000),
+            config::read_bool("STRAT_VAULTS_TRANSACTIONS_COMPOUND_REINDEX", false),
         ),
         StrategyConfig::new(
             *Box::new(SuperChainBadgesMintedProccesor),
             "badges_minted",
-            125901059,
-            true,
+            config::read_block("STRAT_BADGES_MINTED_FROM", 125_901_059),
+            config::read_bool("STRAT_BADGES_MINTED_REINDEX", false),
         ),
     ];
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;
