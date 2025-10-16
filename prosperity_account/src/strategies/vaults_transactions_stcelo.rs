@@ -170,7 +170,7 @@ where
         };
         rows.push(Row {
             account_hex,
-            token_hex: ST_CELO_ADDRESS.to_string(),
+            token_hex: st_celo_addr().to_string(),
             amount: amount.parse()?,
             direction,
             txhash_hex: log
