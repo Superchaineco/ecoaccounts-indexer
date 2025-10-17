@@ -1,12 +1,8 @@
-use std::borrow::Cow;
-use std::env;
+use std::collections::HashMap;
 
-use alloy::{
-    eips::BlockNumberOrTag,
-    primitives::{Address, address},
-    rpc::types::Log,
-};
+use alloy::{eips::BlockNumberOrTag, primitives::Address, rpc::types::Log};
 use async_trait::async_trait;
+use chrono::{TimeZone, Utc};
 use eyre::{Ok, Result};
 use futures_util::future::try_join;
 use indexer_core::strategies::{ChunkProcessor, Stats};
@@ -78,6 +74,7 @@ where
         return Ok(Stats::default());
     }
 
+    let mut block_timestamps: HashMap<u64, chrono::DateTime<chrono::Utc>> = HashMap::new();
     struct Row {
         badge_id: i32,
         account: String,
@@ -92,7 +89,10 @@ where
     for event in all_logs {
         match event {
             Event::Minted(ev, log) => {
-                let tx_hex = log.transaction_hash.map(|h| format!("{:#x}", h)).unwrap_or_default();
+                let tx_hex = log
+                    .transaction_hash
+                    .map(|h| format!("{:#x}", h))
+                    .unwrap_or_default();
                 let block_num = log.block_number.unwrap_or(0) as i32;
                 rows.push(Row {
                     badge_id: ev.badgeId.to::<i32>(),
@@ -101,11 +101,35 @@ where
                     points: ev.points.to::<i32>(),
                     block_number: block_num,
                     tx_hash: tx_hex,
-                    claimed_at: chrono::Utc::now(),
+                    claimed_at: if let Some(ts) = log.block_timestamp {
+                        Utc.timestamp_opt(ts as i64, 0).unwrap()
+                    } else if let Some(block_num) = log.block_number {
+                        // Usar cache o fetch si no existe
+                        if let Some(&cached_time) = block_timestamps.get(&block_num) {
+                            cached_time
+                        } else {
+                            // Fetch block timestamp
+                            let timestamp = provider
+                                .get_block_by_number(BlockNumberOrTag::Number(block_num))
+                                .await
+                                .ok()
+                                .flatten()
+                                .map(|b| b.header.timestamp)
+                                .unwrap_or(0);
+                            let datetime = Utc.timestamp_opt(timestamp as i64, 0).unwrap();
+                            block_timestamps.insert(block_num, datetime);
+                            datetime
+                        }
+                    } else {
+                        Utc.timestamp_opt(0, 0).unwrap()
+                    },
                 });
             }
             Event::Updated(ev, log) => {
-                let tx_hex = log.transaction_hash.map(|h| format!("{:#x}", h)).unwrap_or_default();
+                let tx_hex = log
+                    .transaction_hash
+                    .map(|h| format!("{:#x}", h))
+                    .unwrap_or_default();
                 let block_num = log.block_number.unwrap_or(0) as i32;
                 rows.push(Row {
                     badge_id: ev.badgeId.to::<i32>(),
@@ -122,7 +146,7 @@ where
 
     const MAX_PARAMS: usize = u16::MAX as usize;
     const PARAMS_PER_ROW: usize = 7;
-    
+
     const MAX_ROWS_PER_BATCH: usize = MAX_PARAMS / PARAMS_PER_ROW;
 
     let mut total_rows_written: u64 = 0;
