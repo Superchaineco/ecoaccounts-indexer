@@ -1,4 +1,4 @@
-use std::collections::{HashSet, HashMap};
+use std::collections::{HashMap, HashSet};
 
 use alloy::{
     eips::BlockNumberOrTag,
@@ -9,12 +9,15 @@ use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use eyre::Result;
 use futures_util::try_join;
-use sqlx::{PgPool, QueryBuilder, query_scalar_unchecked};
 use indexer_core::strategies::{ChunkProcessor, Stats};
+use sqlx::{PgPool, QueryBuilder, query_scalar_unchecked};
 
 use crate::{
     config::st_celo_addr,
-    contracts::StCelo::{self, Transfer},
+    contracts::{
+        StCelo::{self, Transfer},
+        StCeloManager,
+    },
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -33,7 +36,6 @@ impl Direction {
 
 #[derive(Clone)]
 pub struct VaultsTransactionsStCeloManagerProcessor;
-
 
 #[async_trait]
 impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P>
@@ -57,19 +59,17 @@ pub async fn process_vaults_transactions_chunk<P>(
 where
     P: alloy::providers::Provider + Clone + Send + Sync + 'static,
 {
-    let st_celo_contract = st_celo_addr();
-
-    let st_celo_manager_contract = StCelo::new(st_celo_contract, provider.clone());
+    let st_celo_contract = StCelo::new(st_celo_addr(), provider.clone());
 
     let t0 = std::time::Instant::now();
 
     tracing::info!(from = from, to = to, "processing event range");
-    let supply_filter = st_celo_manager_contract
+    let supply_filter = st_celo_contract
         .Transfer_filter()
         .from_block(BlockNumberOrTag::Number(from.into()))
         .to_block(BlockNumberOrTag::Number(to.into()))
         .topic1(Address::ZERO);
-    let withdraw_filter = st_celo_manager_contract
+    let withdraw_filter = st_celo_contract
         .Transfer_filter()
         .from_block(BlockNumberOrTag::Number(from.into()))
         .to_block(BlockNumberOrTag::Number(to.into()))
@@ -155,18 +155,41 @@ where
 
     for event in filtered_logs {
         let (direction, account_hex, amount, log) = match event {
-            Event::Deposit(ev, log) => (
-                Direction::In,
-                ev.to.to_string(),
-                ev.value.to_string(),
-                log,
-            ),
-            Event::Withdraw(ev, log) => (
-                Direction::Out,
-                ev.from.to_string(),
-                ev.value.to_string(),
-                log,
-            ),
+            Event::Deposit(ev, log) => {
+                let mut value = ev.value.to_string();
+
+                if let Some(tx_hash) = log.transaction_hash {
+                    let receipt = provider
+                        .get_transaction_receipt(tx_hash)
+                        .await?
+                        .expect("No receipt found")
+                        .decoded_log::<StCeloManager::VotesScheduled>();
+                    value = receipt.unwrap().amount.to_string();
+                };
+
+                (Direction::In, ev.to.to_string(), value, log)
+            }
+            Event::Withdraw(ev, log) => {
+                let mut value = ev.value.to_string();
+
+                if let Some(tx_hash) = log.transaction_hash {
+                    if let Some(receipt) = provider.get_transaction_receipt(tx_hash).await? {
+                        if let Some(decoded) = receipt
+                            .logs()
+                            .iter()
+                            .find(|log| {
+                                log.address()
+                                    == address!("0x471EcE3750Da237f93B8E339c536989b8978a438")
+                            })
+                            .and_then(|log| log.log_decode::<StCelo::Transfer>().ok())
+                        {
+                            value = decoded.data().value.to_string();
+                        }
+                    }
+                }
+
+                (Direction::Out, ev.from.to_string(), value, log)
+            }
         };
         rows.push(Row {
             account_hex,
@@ -187,7 +210,8 @@ where
                         cached_time
                     } else {
                         // Fetch block timestamp
-                        let timestamp = provider.get_block_by_number(BlockNumberOrTag::Number(block_num))
+                        let timestamp = provider
+                            .get_block_by_number(BlockNumberOrTag::Number(block_num))
                             .await
                             .ok()
                             .flatten()

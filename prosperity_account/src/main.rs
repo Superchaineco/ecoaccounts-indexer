@@ -1,6 +1,6 @@
+mod config;
 mod contracts;
 mod strategies;
-mod config;
 
 use std::env;
 
