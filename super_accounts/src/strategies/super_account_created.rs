@@ -102,7 +102,7 @@ where
     }
 
     let mut qb = QueryBuilder::new(
-        "INSERT INTO super_account (
+        "INSERT INTO super_accounts (
             account, nationality, username, eoas, level,
             noun, total_points, total_badges,
             last_update_block_number, last_update_tx_hash
