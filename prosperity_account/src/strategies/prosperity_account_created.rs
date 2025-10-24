@@ -4,22 +4,22 @@ use alloy::{
     eips::BlockNumberOrTag,
     primitives::{Address, address},
 };
+use async_trait::async_trait;
 use eyre::{Ok, Result};
+use indexer_core::strategies::{ChunkProcessor, Stats};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder};
-use async_trait::async_trait;
-use indexer_core::strategies::{Stats, ChunkProcessor};
 
-use crate::contracts::SuperChainModule;
 use crate::config::super_account_module_addr;
-
+use crate::contracts::SuperChainModule;
 
 #[derive(Clone)]
 pub struct ProsperityAccountCreatedProcessor;
 
-
 #[async_trait]
-impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P> for ProsperityAccountCreatedProcessor {
+impl<P: alloy::providers::Provider + Clone + Send + Sync + 'static> ChunkProcessor<P>
+    for ProsperityAccountCreatedProcessor
+{
     async fn process(&self, provider: P, db: &PgPool, from: u64, to: u64) -> Result<Stats> {
         process_super_account_created_chunk(provider, db, from, to).await
     }
@@ -55,6 +55,7 @@ where
         tracing::info!(from = from, to = to, "no logs found in range");
         return Ok(Stats::default());
     }
+    #[derive(Debug)]
     struct Row {
         account_hex: String,
         username: String,
@@ -69,6 +70,8 @@ where
         let (username_cow, nuls) = sanitize_text(&event.superChainId);
         let tx_hex = raw_log.transaction_hash.map(|h| format!("{:#x}", h));
         let block_num = raw_log.block_number;
+
+        if let Some(tx) = tx_hex.clone() {}
 
         if nuls > 0 {
             tracing::warn!(
@@ -120,9 +123,22 @@ where
             .push_bind(r.last_update_block_number)
             .push_bind(&r.last_update_tx_hash);
     });
-    qb.push(" ON CONFLICT (account) DO NOTHING");
+
+    // Cambiar lógica de ON CONFLICT para manejar actualizaciones
+    qb.push(" ON CONFLICT (account) DO UPDATE SET ")
+        .push("username = EXCLUDED.username, ")
+        .push("eoas = EXCLUDED.eoas, ")
+        .push("noun = EXCLUDED.noun, ")
+        .push("last_update_block_number = EXCLUDED.last_update_block_number, ")
+        .push("last_update_tx_hash = EXCLUDED.last_update_tx_hash");
 
     let batch_res = qb.build().execute(db).await;
+
+    // Manejar errores en la consulta
+    if let Err(e) = &batch_res {
+        tracing::error!(error = ?e, "Error when executing batch insert/update");
+    }
+
     let took_ms = t0.elapsed().as_millis();
     tracing::info!(
         from = from,
