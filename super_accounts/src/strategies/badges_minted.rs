@@ -75,6 +75,7 @@ where
     }
 
     let mut block_timestamps: HashMap<u64, chrono::DateTime<chrono::Utc>> = HashMap::new();
+    #[derive(Debug)]
     struct Row {
         badge_id: i32,
         account: String,
@@ -152,7 +153,7 @@ where
     let mut total_rows_written: u64 = 0;
 
     if !rows.is_empty() {
-        for chunk in rows.chunks(MAX_ROWS_PER_BATCH) {
+        for (chunk_idx, chunk) in rows.chunks(MAX_ROWS_PER_BATCH).enumerate() {
             let mut qb = QueryBuilder::new(
                 "INSERT INTO badge_claims (
                     badge_id, account, tier, points, block_number, tx_hash, claimed_at
@@ -171,7 +172,19 @@ where
 
             qb.push(" ON CONFLICT (badge_id, tier, account, block_number) DO NOTHING");
 
-            let res = qb.build().execute(db).await?;
+            let res = qb.build().execute(db).await.map_err(|e| {
+                let err_msg = format!(
+                    "Failed to insert badge claims batch (chunk {}, rows {}-{}): {}. \
+                     Sample rows: {:?}",
+                    chunk_idx,
+                    total_rows_written,
+                    total_rows_written + chunk.len() as u64,
+                    e,
+                    chunk.iter().take(3).collect::<Vec<_>>()
+                );
+                tracing::error!("{}", err_msg);
+                eyre::eyre!(err_msg)
+            })?;
             total_rows_written = total_rows_written.saturating_add(res.rows_affected());
         }
     }
