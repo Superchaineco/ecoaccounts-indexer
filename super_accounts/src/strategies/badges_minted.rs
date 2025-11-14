@@ -170,7 +170,14 @@ where
                     .push_bind(r.claimed_at);
             });
 
-            qb.push(" ON CONFLICT (badge_id, tier, account, block_number) DO NOTHING");
+            qb.push(
+                " ON CONFLICT (badge_id, tier, account, block_number)
+          DO UPDATE SET
+              tier = EXCLUDED.tier,
+              points = EXCLUDED.points,
+              tx_hash = EXCLUDED.tx_hash,
+              claimed_at = EXCLUDED.claimed_at",
+            );
 
             let res = qb.build().execute(db).await.map_err(|e| {
                 let err_msg = format!(
