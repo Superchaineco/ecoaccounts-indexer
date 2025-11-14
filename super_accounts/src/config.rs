@@ -16,7 +16,7 @@ pub fn super_account_module_addr() -> Address {
     env::var("STRAT_SUPER_ACCOUNT_CREATED_ADDR")
         .ok()
         .and_then(|s| s.parse::<Address>().ok())
-        .unwrap_or(address!("0x58f5805b5072C3Dd157805132714E1dF40E79c66"))
+        .unwrap_or(address!("0x1Ee397850c3CA629d965453B3cF102E9A8806Ded"))
 }
 
 pub fn badges_addr() -> Address {
