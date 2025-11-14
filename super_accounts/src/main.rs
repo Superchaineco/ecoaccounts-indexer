@@ -35,13 +35,13 @@ async fn main() -> Result<()> {
         StrategyConfig::new(
             *Box::new(SuperAccountCreatedProcessor),
             "super_account_created",
-            config::read_block("STRAT_SUPER_ACCOUNT_CREATED_FROM", 139800000),
+            config::read_block("STRAT_SUPER_ACCOUNT_CREATED_FROM", 125901332),
             config::read_bool("STRAT_SUPER_ACCOUNT_CREATED_REINDEX", false),
         ),
         StrategyConfig::new(
             *Box::new(VaultsTransactionsCompoundProcessor),
             "vaults_transactions_compound",
-            config::read_block("STRAT_VAULTS_TRANSACTIONS_COMPOUND_FROM", 139800000),
+            config::read_block("STRAT_VAULTS_TRANSACTIONS_COMPOUND_FROM", 125901332),
             config::read_bool("STRAT_VAULTS_TRANSACTIONS_COMPOUND_REINDEX", false),
         ),
         StrategyConfig::new(
