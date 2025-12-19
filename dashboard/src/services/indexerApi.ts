@@ -1,7 +1,20 @@
 import axios from 'axios';
 import type { IndexerStatus, ApiResponse, ReindexRequest } from '../types/api';
 
-const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+// When served from the same origin (e.g., /dashboard), use relative paths
+// Otherwise use the configured URL (for development with separate servers)
+const getApiBase = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  // Check if we're served from /dashboard (same origin as API)
+  if (window.location.pathname.startsWith('/dashboard')) {
+    return window.location.origin + '/api';
+  }
+  return 'http://localhost:3000';
+};
+
+const API_BASE = getApiBase();
 const API_KEY = import.meta.env.VITE_API_KEY || 'your-api-key';
 
 const apiClient = axios.create({

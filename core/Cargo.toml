@@ -20,7 +20,8 @@ async-trait = "0.1"
 
 # API dependencies
 axum = "0.8"
-tower-http = { version = "0.6", features = ["trace", "cors"] }
+tower-http = { version = "0.6", features = ["trace", "cors", "fs"] }
+tower = "0.5"
 thiserror = "2.0"
 
 [lib]

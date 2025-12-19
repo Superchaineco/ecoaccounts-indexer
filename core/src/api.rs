@@ -7,9 +7,11 @@ use axum::{
     routing::{get, post},
 };
 use tower_http::cors::{CorsLayer, Any};
+use tower_http::services::{ServeDir, ServeFile};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::PathBuf;
 use tokio::sync::RwLock;
 
 // ============================================================================
@@ -196,17 +198,46 @@ async fn auth(
 }
 
 pub fn router(app: Arc<App>) -> Router {
+    router_with_dashboard(app, None)
+}
+
+pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> Router {
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([header::CONTENT_TYPE, header::HeaderName::from_static("x-api-key")]);
 
-    Router::new()
+    // API routes (protected by auth)
+    let api_routes = Router::new()
         .route("/status", get(get_status))
         .route("/pause", post(pause))
         .route("/resume", post(resume))
         .route("/reindex", post(reindex))
         .layer(middleware::from_fn_with_state(app.clone(), auth))
-        .layer(cors)
-        .with_state(app)
+        .with_state(app.clone());
+
+    let mut router = Router::new()
+        .nest("/api", api_routes.clone())
+        // Keep old routes for backward compatibility
+        .merge(api_routes)
+        .layer(cors);
+
+    // Serve dashboard static files if path is provided
+    if let Some(path) = dashboard_path {
+        if path.exists() {
+            let index_path = path.join("index.html");
+            
+            // Create ServeDir with fallback to index.html for SPA routing
+            let serve_dir = ServeDir::new(&path).fallback(ServeFile::new(&index_path));
+            
+            // Serve static files at /dashboard
+            router = router.nest_service("/dashboard", serve_dir);
+            
+            tracing::info!("Dashboard: serving from {:?} at /dashboard", path);
+        } else {
+            tracing::warn!("Dashboard path {:?} does not exist", path);
+        }
+    }
+
+    router
 }

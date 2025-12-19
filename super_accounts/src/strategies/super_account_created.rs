@@ -1,9 +1,8 @@
 use std::borrow::Cow;
-use std::env;
 
 use alloy::{
     eips::BlockNumberOrTag,
-    primitives::{Address, address},
+    primitives::Address,
 };
 use async_trait::async_trait;
 use eyre::{Ok, Result};

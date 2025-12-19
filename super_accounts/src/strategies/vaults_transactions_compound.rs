@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
-use std::env;
 
-use alloy::{eips::BlockNumberOrTag, primitives::address, rpc::types::Log};
+use alloy::{eips::BlockNumberOrTag, rpc::types::Log};
 use async_trait::async_trait;
 use chrono::{TimeZone, Utc};
 use eyre::Result;

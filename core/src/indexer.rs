@@ -1,4 +1,4 @@
-use crate::api::{router, App, IndexState, Status};
+use crate::api::{router_with_dashboard, App, IndexState, Status};
 use crate::strategies::{ChunkProcessor, IndexedRangeDecorator, Stats, StrategyConfig};
 use alloy::providers::Provider;
 use eyre::{Result, ensure};
@@ -6,6 +6,7 @@ use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::{error, info, warn};
 
@@ -107,10 +108,28 @@ where
 
     let app = App::new(api_key);
 
+    // Check for dashboard path
+    let dashboard_path = std::env::var("DASHBOARD_PATH")
+        .ok()
+        .map(PathBuf::from)
+        .or_else(|| {
+            // Try to find dashboard/dist relative to current dir
+            let candidates = [
+                PathBuf::from("dashboard/dist"),
+                PathBuf::from("../dashboard/dist"),
+            ];
+            candidates.into_iter().find(|p| p.exists())
+        });
+
     // Start API server
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    info!("API: http://0.0.0.0:{port} (endpoints: /status, /pause, /resume, /reindex)");
-    let r = router(app.clone());
+    if dashboard_path.is_some() {
+        info!("API: http://0.0.0.0:{port} (endpoints: /api/*, /dashboard)");
+    } else {
+        info!("API: http://0.0.0.0:{port} (endpoints: /status, /pause, /resume, /reindex)");
+        info!("Dashboard not found. Set DASHBOARD_PATH or build dashboard with 'npm run build'");
+    }
+    let r = router_with_dashboard(app.clone(), dashboard_path);
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tokio::spawn(async move { axum::serve(listener, r).await.ok(); });
 
