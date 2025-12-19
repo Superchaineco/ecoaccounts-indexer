@@ -53,6 +53,13 @@ const RefreshIcon = () => (
   </svg>
 );
 
+const ResetIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </svg>
+);
+
 // Header Component
 function Header({ status }: { status?: IndexerStatus }) {
   const statusClass = status?.status || 'running';
@@ -275,8 +282,17 @@ function ControlPanel({ status, disabled }: { status: string; disabled?: boolean
     onError: () => showAlert('Failed to start reindex', 'error'),
   });
 
+  const resetMutation = useMutation({
+    mutationFn: indexerApi.reset,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['status'] });
+      showAlert('Indexer reset to default state', 'success');
+    },
+    onError: () => showAlert('Failed to reset indexer', 'error'),
+  });
+
   const isPaused = status === 'paused';
-  const isLoading = pauseMutation.isPending || resumeMutation.isPending || reindexMutation.isPending;
+  const isLoading = pauseMutation.isPending || resumeMutation.isPending || reindexMutation.isPending || resetMutation.isPending;
 
   return (
     <>
@@ -311,6 +327,14 @@ function ControlPanel({ status, disabled }: { status: string; disabled?: boolean
             disabled={disabled || isLoading}
           >
             <RefreshIcon /> Reindex
+          </button>
+          <button
+            className="btn btn-outline"
+            onClick={() => resetMutation.mutate()}
+            disabled={disabled || isLoading}
+            title="Reset indexer to default state"
+          >
+            <ResetIcon /> Reset
           </button>
         </div>
       </div>

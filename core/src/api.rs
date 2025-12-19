@@ -181,6 +181,19 @@ async fn reindex(
     Ok(Json(Resp { ok: true, msg: "reindexing".into() }))
 }
 
+async fn reset(State(app): State<Arc<App>>) -> Json<Resp> {
+    let mut s = app.state.write().await;
+    s.status = Status::Running;
+    s.index = None;
+    s.pending_reindex = None;
+    drop(s);
+    
+    app.set_paused(false);
+    
+    tracing::info!("Indexer reset to default state");
+    Json(Resp { ok: true, msg: "reset to default state".into() })
+}
+
 // ============================================================================
 // Auth & Router
 // ============================================================================
@@ -217,6 +230,7 @@ pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> 
         .route("/pause", post(pause))
         .route("/resume", post(resume))
         .route("/reindex", post(reindex))
+        .route("/reset", post(reset))
         .layer(middleware::from_fn_with_state(app.clone(), auth))
         .with_state(app.clone());
 

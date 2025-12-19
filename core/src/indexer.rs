@@ -181,7 +181,13 @@ where
                 }
 
                 if from <= to {
-                    info!(from, to, strategy = ?reindex_req.strategy, "reindexing");
+                    info!("╔══════════════════════════════════════════════════════════════╗");
+                    info!("║                    🔄 REINDEX STARTED                        ║");
+                    info!("╠══════════════════════════════════════════════════════════════╣");
+                    info!("║  From Block: {:>15}                                ║", from);
+                    info!("║  To Block:   {:>15}                                ║", to);
+                    info!("║  Strategy:   {:?}", reindex_req.strategy.as_deref().unwrap_or("ALL"));
+                    info!("╚══════════════════════════════════════════════════════════════╝");
                     for mut strat in strats {
                         strat.force_reindex = true;
                         match run_indexer(provider.clone(), db, from, to, chunk_size, vec![strat], Some(app.clone())).await {
@@ -199,7 +205,9 @@ where
                 let mut s = app.state.write().await;
                 s.index = None;
                 s.status = Status::Running;
-                info!("reindex done");
+                info!("╔══════════════════════════════════════════════════════════════╗");
+                info!("║                    ✅ REINDEX COMPLETED                      ║");
+                info!("╚══════════════════════════════════════════════════════════════╝");
             }
             continue;
         }

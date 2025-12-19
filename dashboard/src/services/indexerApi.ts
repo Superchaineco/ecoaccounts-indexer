@@ -39,4 +39,9 @@ export const indexerApi = {
     const response = await apiClient.post<ApiResponse>('/reindex', params);
     return response.data;
   },
+
+  reset: async (): Promise<ApiResponse> => {
+    const response = await apiClient.post<ApiResponse>('/reset');
+    return response.data;
+  },
 };
