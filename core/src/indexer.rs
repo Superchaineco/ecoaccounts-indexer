@@ -1,4 +1,5 @@
 use crate::api::{router_with_dashboard, App, IndexState, Status};
+use crate::resilience::{AdaptiveChunkManager, RetryConfig, with_retry};
 use crate::strategies::{ChunkProcessor, IndexedRangeDecorator, Stats, StrategyConfig};
 use alloy::providers::Provider;
 use eyre::{Result, ensure};
@@ -8,31 +9,52 @@ use sqlx::PgPool;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 // ============================================================================
 // Core indexer
 // ============================================================================
+
+/// Configuration for running the indexer with resilience.
+#[derive(Clone)]
+pub struct IndexerConfig {
+    pub retry: RetryConfig,
+    pub chunk_manager: Arc<AdaptiveChunkManager>,
+}
+
+impl IndexerConfig {
+    pub fn new(initial_chunk_size: u64) -> Self {
+        Self {
+            retry: RetryConfig::default(),
+            chunk_manager: AdaptiveChunkManager::new(
+                initial_chunk_size,
+                100,                      // min: 100 blocks
+                initial_chunk_size * 2,   // max: 2x initial
+            ),
+        }
+    }
+}
 
 pub async fn run_indexer<P>(
     provider: P,
     db: &PgPool,
     from: u64,
     to: u64,
-    chunk_size: u64,
+    config: &IndexerConfig,
     strategies: Vec<StrategyConfig<P>>,
     app: Option<Arc<App>>,
-) -> Result<u64>  // Returns last processed block (for resume)
+) -> Result<u64>
 where
     P: Provider + Clone + Send + Sync + 'static,
 {
     ensure!(from <= to, "from > to");
     let total = to - from + 1;
-    info!(from, to, total, chunk_size, "starting indexer");
+    let initial_chunk = config.chunk_manager.get();
+    info!(from, to, total, chunk_size = initial_chunk, "starting indexer with resilience");
 
     let bar = ProgressBar::new(total);
     bar.set_style(ProgressStyle::with_template(
-        "[{elapsed_precise}] {bar:40.cyan/blue} {percent}% | Block {pos}/{len} | ETA {eta}"
+        "[{elapsed_precise}] {bar:40.cyan/blue} {percent}% | Block {pos}/{len} | Chunk: {msg} | ETA {eta}"
     )?.progress_chars("=>-"));
 
     let mut cur = from;
@@ -42,7 +64,6 @@ where
             if a.should_interrupt().await {
                 bar.finish_with_message("⏸️ Interrupted");
                 warn!(block = cur, "interrupted");
-                // Save current position
                 let mut s = a.state.write().await;
                 if let Some(ref mut idx) = s.index {
                     idx.current = cur;
@@ -56,27 +77,73 @@ where
             }
         }
 
+        // Use adaptive chunk size
+        let chunk_size = config.chunk_manager.get();
+        bar.set_message(format!("{}", chunk_size));
+
         let end = (cur + chunk_size - 1).min(to);
-        info!(start = cur, end, "processing chunk");
+        debug!(start = cur, end, chunk_size, "processing chunk");
 
         let tasks: Vec<_> = strategies.iter().map(|cfg| {
             let p = provider.clone();
             let d = db.clone();
             let c = cfg.clone();
             let (s, e) = (cur, end);
+            let retry_config = config.retry.clone();
+            let chunk_manager = config.chunk_manager.clone();
+
             tokio::spawn(async move {
-                if s.max(c.from_block) > e { return Ok(Stats::default()); }
-                IndexedRangeDecorator::new(c.processor.clone(), c.name, c.force_reindex)
-                    .process(p, &d, s, e).await
+                if s.max(c.from_block) > e {
+                    return Ok(Stats::default());
+                }
+
+                let strategy_name = c.name;
+                let processor = IndexedRangeDecorator::new(c.processor.clone(), c.name, c.force_reindex);
+
+                // Execute with retry
+                let result = with_retry(&retry_config, strategy_name, || {
+                    let proc = processor.clone();
+                    let prov = p.clone();
+                    let database = d.clone();
+                    async move {
+                        proc.process(prov, &database, s, e).await
+                    }
+                }).await;
+
+                match &result {
+                    Ok(_) => chunk_manager.on_success(),
+                    Err(e) => chunk_manager.on_rpc_error(&e.to_string()),
+                }
+
+                result
             })
         }).collect();
 
+        let mut had_error = false;
         for r in join_all(tasks).await {
             match r {
-                Ok(Ok(s)) => info!(logs = s.logs_found, rows = s.rows_written, "done"),
-                Ok(Err(e)) => error!("strategy error: {e}"),
-                Err(e) => error!("task panic: {e}"),
+                Ok(Ok(s)) => {
+                    if s.logs_found > 0 || s.rows_written > 0 {
+                        info!(logs = s.logs_found, rows = s.rows_written, "strategy completed");
+                    }
+                }
+                Ok(Err(e)) => {
+                    error!("strategy error: {e}");
+                    had_error = true;
+                }
+                Err(e) => {
+                    error!("task panic: {e}");
+                    had_error = true;
+                }
             }
+        }
+
+        // If there were errors, we still continue but the chunk may have been reduced
+        if had_error {
+            debug!(
+                chunk_size = config.chunk_manager.get(),
+                "continuing after errors (chunk may have been adjusted)"
+            );
         }
 
         bar.inc(end - cur + 1);
@@ -107,6 +174,15 @@ where
     let api_key = std::env::var("API_KEY").unwrap_or_else(|_| "changeme".into());
 
     let app = App::new(api_key);
+
+    // Create resilient indexer configuration
+    let config = IndexerConfig::new(chunk_size);
+    info!(
+        chunk_size = config.chunk_manager.get(),
+        min = 100,
+        max = chunk_size * 2,
+        "initialized adaptive chunk manager"
+    );
 
     // Check for dashboard path
     let dashboard_path = std::env::var("DASHBOARD_PATH")
@@ -190,7 +266,7 @@ where
                     info!("╚══════════════════════════════════════════════════════════════╝");
                     for mut strat in strats {
                         strat.force_reindex = true;
-                        match run_indexer(provider.clone(), db, from, to, chunk_size, vec![strat], Some(app.clone())).await {
+                        match run_indexer(provider.clone(), db, from, to, &config, vec![strat], Some(app.clone())).await {
                             Ok(_) => {}
                             Err(e) => error!("reindex error: {e}"),
                         }
@@ -219,7 +295,7 @@ where
                 // Resume from where we left off
                 info!(from = idx.current, to = idx.to, "resuming indexing");
                 
-                match run_indexer(provider.clone(), db, idx.current, idx.to, chunk_size, strategies.clone(), Some(app.clone())).await {
+                match run_indexer(provider.clone(), db, idx.current, idx.to, &config, strategies.clone(), Some(app.clone())).await {
                     Ok(processed) => {
                         if !app.should_interrupt().await {
                             last = processed;
@@ -260,7 +336,7 @@ where
                 });
             }
 
-            match run_indexer(provider.clone(), db, from, safe, chunk_size, strategies.clone(), Some(app.clone())).await {
+            match run_indexer(provider.clone(), db, from, safe, &config, strategies.clone(), Some(app.clone())).await {
                 Ok(processed) => {
                     if !app.should_interrupt().await {
                         last = processed;
