@@ -116,6 +116,10 @@ pub struct ReindexReq {
 // Handlers
 // ============================================================================
 
+async fn health() -> &'static str {
+    "ok"
+}
+
 async fn get_status(State(app): State<Arc<App>>) -> Json<StatusResp> {
     let s = app.state.read().await;
     Json(StatusResp {
@@ -216,6 +220,10 @@ pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> 
         .layer(middleware::from_fn_with_state(app.clone(), auth))
         .with_state(app.clone());
 
+    // Public routes (NO AUTH)
+    let public_routes: Router<()> = Router::new()
+        .route("/health", get(health));
+
     // Dashboard routes (NO AUTH) - completely separate router
     let dashboard_router: Option<Router> = dashboard_path.and_then(|path| {
         if path.exists() {
@@ -232,15 +240,16 @@ pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> 
     // Build final router: dashboard first (no auth), then API routes (with auth)
     let mut router = Router::new();
     
-    // Add dashboard routes first (these have NO middleware)
+    // Add public routes (health check, etc.)
+    router = router.merge(public_routes);
+    
+    // Add dashboard routes (these have NO middleware)
     if let Some(dr) = dashboard_router {
         router = router.merge(dr);
     }
     
-    // Add API routes (these have auth middleware baked in)
-    router = router
-        .nest("/api", protected_api_routes.clone())
-        .merge(protected_api_routes);
+    // Add API routes under /api prefix (with auth middleware baked in)
+    router = router.nest("/api", protected_api_routes);
 
     // Apply CORS globally
     router.layer(cors)
