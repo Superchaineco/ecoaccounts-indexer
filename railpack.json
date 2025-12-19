@@ -1,51 +1,19 @@
 {
   "$schema": "https://schema.railpack.com",
-
   "packages": {
-    "node": "20",
-    "rust": "stable"
+    "node": "20"
   },
-
   "steps": {
-    "dashboard-install": {
-      "inputs": [
-        {
-          "image": "node:20"
-        }
-      ],
-      "commands": [
-        "cd dashboard",
-        "npm ci"
-      ]
-    },
-
-    "dashboard-build": {
-      "inputs": [
-        {
-          "step": "dashboard-install"
-        }
-      ],
-      "commands": [
-        "cd dashboard",
-        "npm run build"
-      ]
-    },
-
     "build": {
-      "inputs": [
-        {
-          "step": "dashboard-build"
-        }
-      ],
       "commands": [
-        "cargo build --release",
-        "mkdir -p bin/dashboard",
+        "mkdir -p bin",
+        "cargo build --release --package super_accounts",
         "cp target/release/super_accounts bin/",
+        "mkdir -p bin/dashboard",
         "cp -r dashboard/dist/* bin/dashboard/"
       ]
     }
   },
-
   "deploy": {
     "startCommand": "./bin/super_accounts",
     "variables": {

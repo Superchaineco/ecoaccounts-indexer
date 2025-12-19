@@ -1,0 +1,23 @@
+# Rust build artifacts
+target/
+
+# Node dependencies  
+node_modules/
+dashboard/node_modules/
+
+# Git
+.git/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Environment files (keep in Railway settings)
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
