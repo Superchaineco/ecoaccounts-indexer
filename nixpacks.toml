@@ -1,5 +1,17 @@
 [phases.setup]
-nixPkgs = ["binutils", "gcc", "rust-bin.stable.latest.default"]
+nixPkgs = ["binutils", "gcc", "rust-bin.stable.latest.default", "nodejs_20", "nodePackages.npm"]
 
 [phases.install]
-cmds = ["cargo fetch"]
+cmds = [
+    "cargo fetch",
+    "cd dashboard && npm ci"
+]
+
+[phases.build]
+cmds = [
+    "cd dashboard && npm run build",
+    "cargo build --release"
+]
+
+[start]
+cmd = "./target/release/super_accounts"

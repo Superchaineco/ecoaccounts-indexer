@@ -208,7 +208,7 @@ pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> 
         .allow_headers([header::CONTENT_TYPE, header::HeaderName::from_static("x-api-key")]);
 
     // API routes (protected by auth)
-    let api_routes = Router::new()
+    let protected_api_routes = Router::new()
         .route("/status", get(get_status))
         .route("/pause", post(pause))
         .route("/resume", post(resume))
@@ -216,29 +216,32 @@ pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> 
         .layer(middleware::from_fn_with_state(app.clone(), auth))
         .with_state(app.clone());
 
-    // Start with API routes
-    let mut router = Router::new()
-        .nest("/api", api_routes.clone())
-        // Keep old routes for backward compatibility
-        .merge(api_routes);
-
-    // Serve dashboard static files if path is provided (NO AUTH REQUIRED)
-    if let Some(path) = dashboard_path {
+    // Dashboard routes (NO AUTH) - completely separate router
+    let dashboard_router: Option<Router> = dashboard_path.and_then(|path| {
         if path.exists() {
             let index_path = path.join("index.html");
-            
-            // Create ServeDir with fallback to index.html for SPA routing
             let serve_dir = ServeDir::new(&path).fallback(ServeFile::new(&index_path));
-            
-            // Serve static files at /dashboard - this is public, no auth needed
-            router = router.nest_service("/dashboard", serve_dir);
-            
             tracing::info!("Dashboard: serving from {:?} at /dashboard (public, no auth)", path);
+            Some(Router::new().nest_service("/dashboard", serve_dir))
         } else {
             tracing::warn!("Dashboard path {:?} does not exist", path);
+            None
         }
-    }
+    });
 
-    // Apply CORS to all routes
+    // Build final router: dashboard first (no auth), then API routes (with auth)
+    let mut router = Router::new();
+    
+    // Add dashboard routes first (these have NO middleware)
+    if let Some(dr) = dashboard_router {
+        router = router.merge(dr);
+    }
+    
+    // Add API routes (these have auth middleware baked in)
+    router = router
+        .nest("/api", protected_api_routes.clone())
+        .merge(protected_api_routes);
+
+    // Apply CORS globally
     router.layer(cors)
 }
