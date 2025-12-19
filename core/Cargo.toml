@@ -18,5 +18,10 @@ tracing-subscriber = { version = "0.3", features = ["fmt", "env-filter"] }
 chrono = "0.4.41"
 async-trait = "0.1"
 
+# API dependencies
+axum = "0.8"
+tower-http = { version = "0.6", features = ["trace", "cors"] }
+thiserror = "2.0"
+
 [lib]
 path = "src/lib.rs"

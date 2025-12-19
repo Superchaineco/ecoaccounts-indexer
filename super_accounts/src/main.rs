@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
 
     info!(rpc_url = %rpc_url, strategies = ?strategies, "launching indexer");
 
-    run_indexer_and_follow(provider, &db, strategies, 100_000, 4, 5).await?;
+    run_indexer_and_follow(provider, &db, strategies, 100_000, 32, 5).await?;
 
     Ok(())
 }

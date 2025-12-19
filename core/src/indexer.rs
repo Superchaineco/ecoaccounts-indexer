@@ -1,144 +1,254 @@
-use crate::strategies::{
-    ChunkProcessor,
-    IndexedRangeDecorator,
-    Stats,
-    StrategyConfig, // VaultsTransactionsCompoundProcessor,
-};
+use crate::api::{router, App, IndexState, Status};
+use crate::strategies::{ChunkProcessor, IndexedRangeDecorator, Stats, StrategyConfig};
 use alloy::providers::Provider;
 use eyre::{Result, ensure};
 use futures_util::future::join_all;
 use indicatif::{ProgressBar, ProgressStyle};
 use sqlx::PgPool;
-use tracing::{error, info};
+use std::net::SocketAddr;
+use std::sync::Arc;
+use tracing::{error, info, warn};
+
+// ============================================================================
+// Core indexer
+// ============================================================================
 
 pub async fn run_indexer<P>(
     provider: P,
     db: &PgPool,
-    from_block: u64,
-    to_block: u64,
+    from: u64,
+    to: u64,
     chunk_size: u64,
     strategies: Vec<StrategyConfig<P>>,
-) -> Result<()>
+    app: Option<Arc<App>>,
+) -> Result<u64>  // Returns last processed block (for resume)
 where
     P: Provider + Clone + Send + Sync + 'static,
 {
-    ensure!(from_block <= to_block, "from_block > to_block");
-    ensure!(chunk_size > 0, "chunk_size must be > 0");
-    let total = to_block.saturating_sub(from_block).saturating_add(1);
+    ensure!(from <= to, "from > to");
+    let total = to - from + 1;
+    info!(from, to, total, chunk_size, "starting indexer");
 
-    info!(
-        from = from_block,
-        to = to_block,
-        total,
-        chunk_size,
-        "starting run_indexer"
-    );
+    let bar = ProgressBar::new(total);
+    bar.set_style(ProgressStyle::with_template(
+        "[{elapsed_precise}] {bar:40.cyan/blue} {percent}% | Block {pos}/{len} | ETA {eta}"
+    )?.progress_chars("=>-"));
 
-    let bar = ProgressBar::new(total.into());
-    bar.set_style(
-        ProgressStyle::with_template(
-            "[{elapsed_precise}] {bar:40.cyan/blue} {percent}% | Block {pos}/{len} | ETA {eta}",
-        )?
-        .progress_chars("=>-"),
-    );
-
-    let mut cur = from_block;
-    while cur <= to_block {
-        let start = cur;
-        let end = (start + chunk_size - 1).min(to_block);
-
-        let chunk_size_actual = end - start + 1;
-        info!(start, end, chunk_size_actual, "processing chunk");
-
-        let tasks: Vec<_> = strategies
-            .iter()
-            .map(|config| {
-                let provider = provider.clone();
-                let db = db.clone();
-                let start = start;
-                let end = end;
-                let config = config.clone();
-                tokio::spawn(async move {
-                    if start.max(config.from_block) > end {
-                        return Ok(Stats::default());
-                    }
-                    let processor = IndexedRangeDecorator::new(
-                        config.processor.clone(),
-                        config.name,
-                        config.force_reindex,
-                    );
-
-                    processor.process(provider, &db, start, end).await
-                })
-            })
-            .collect();
-
-        let results = join_all(tasks).await;
-        for result in results {
-            match result {
-                Ok(Ok(stats)) => {
-                    info!(strategy = ?stats, logs_found = stats.logs_found, rows_written = stats.rows_written, "strategy completed")
+    let mut cur = from;
+    while cur <= to {
+        // Check if should stop (pause or new reindex request)
+        if let Some(ref a) = app {
+            if a.should_interrupt().await {
+                bar.finish_with_message("⏸️ Interrupted");
+                warn!(block = cur, "interrupted");
+                // Save current position
+                let mut s = a.state.write().await;
+                if let Some(ref mut idx) = s.index {
+                    idx.current = cur;
                 }
-                Ok(Err(e)) => error!("Strategy failed: {}", e),
-                Err(e) => error!("Task panicked: {}", e),
+                return Ok(cur);
+            }
+            // Update current position
+            let mut s = a.state.write().await;
+            if let Some(ref mut idx) = s.index {
+                idx.current = cur;
             }
         }
 
-        bar.inc(chunk_size_actual as u64);
-        cur = end.saturating_add(1);
+        let end = (cur + chunk_size - 1).min(to);
+        info!(start = cur, end, "processing chunk");
+
+        let tasks: Vec<_> = strategies.iter().map(|cfg| {
+            let p = provider.clone();
+            let d = db.clone();
+            let c = cfg.clone();
+            let (s, e) = (cur, end);
+            tokio::spawn(async move {
+                if s.max(c.from_block) > e { return Ok(Stats::default()); }
+                IndexedRangeDecorator::new(c.processor.clone(), c.name, c.force_reindex)
+                    .process(p, &d, s, e).await
+            })
+        }).collect();
+
+        for r in join_all(tasks).await {
+            match r {
+                Ok(Ok(s)) => info!(logs = s.logs_found, rows = s.rows_written, "done"),
+                Ok(Err(e)) => error!("strategy error: {e}"),
+                Err(e) => error!("task panic: {e}"),
+            }
+        }
+
+        bar.inc(end - cur + 1);
+        cur = end + 1;
     }
 
-    bar.finish_with_message("✅ Sync completed.");
-    info!("run_indexer finished");
-    Ok(())
+    bar.finish_with_message("✅ Done");
+    info!("indexer finished");
+    Ok(to)
 }
 
+// ============================================================================
+// Main loop with API
+// ============================================================================
+
 pub async fn run_indexer_and_follow<P>(
-    http_provider: P,
+    provider: P,
     db: &PgPool,
     strategies: Vec<StrategyConfig<P>>,
     chunk_size: u64,
     confirmations: u64,
-    poll_interval_secs: u64,
+    poll_secs: u64,
 ) -> Result<()>
 where
     P: Provider + Clone + Send + Sync + 'static,
 {
-    eyre::ensure!(chunk_size > 0, "chunk_size must be > 0");
+    let port: u16 = std::env::var("API_PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(3000);
+    let api_key = std::env::var("API_KEY").unwrap_or_else(|_| "changeme".into());
 
-    // Inicializar el último bloque indexado (usando el mínimo from_block de las estrategias)
-    let min_from_block = strategies.iter().map(|c| c.from_block).min().unwrap_or(0);
-    let mut last_indexed = min_from_block;
+    let app = App::new(api_key);
+
+    // Start API server
+    let addr = SocketAddr::from(([0, 0, 0, 0], port));
+    info!("API: http://0.0.0.0:{port} (endpoints: /status, /pause, /resume, /reindex)");
+    let r = router(app.clone());
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    tokio::spawn(async move { axum::serve(listener, r).await.ok(); });
+
+    let mut last = strategies.iter().map(|c| c.from_block).min().unwrap_or(0);
 
     loop {
-        // Obtener el head actual y calcular safe_head
-        let head = http_provider.get_block_number().await? as u64;
-        let safe_head = head.saturating_sub(confirmations);
-
-        // Si hay nuevos bloques para indexar (desde last_indexed + 1 hasta safe_head)
-        if last_indexed < safe_head {
-            let from = last_indexed.saturating_add(1);
-            let to = safe_head;
-            info!(from, to, "processing range (historical or live)");
-
-            // Ejecutar todas las estrategias en paralelo
-            run_indexer(
-                http_provider.clone(),
-                db,
-                from,
-                to,
-                chunk_size,
-                strategies.clone(),
-            )
-            .await?;
-
-            // Actualizar el último indexado
-            last_indexed = to;
-        } else {
-            info!("no new blocks to index, waiting...");
+        // Wait while paused (but not if there's a pending reindex)
+        while app.is_paused() && app.state.read().await.pending_reindex.is_none() {
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         }
 
-        // Esperar antes del próximo poll
-        tokio::time::sleep(std::time::Duration::from_secs(poll_interval_secs)).await;
+        // Check for pending reindex - takes priority
+        let pending_reindex = {
+            let mut s = app.state.write().await;
+            s.pending_reindex.take()
+        };
+        
+        if let Some(reindex_req) = pending_reindex {
+            // Clear any current index state and start reindex
+            {
+                let mut s = app.state.write().await;
+                s.index = Some(reindex_req.clone());
+                s.status = Status::Reindexing;
+            }
+            app.set_paused(false);
+
+            let strats: Vec<_> = match &reindex_req.strategy {
+                Some(n) => strategies.iter().filter(|s| s.name == n.as_str()).cloned().collect(),
+                None => strategies.to_vec(),
+            };
+
+            if strats.is_empty() {
+                warn!("no matching strategies for reindex");
+            } else {
+                let head = provider.get_block_number().await? as u64;
+                let from = if reindex_req.from > 0 { reindex_req.from }
+                          else { strats.iter().map(|s| s.from_block).min().unwrap_or(0) };
+                let to = if reindex_req.to > 0 { reindex_req.to } 
+                        else { last.max(head.saturating_sub(confirmations)) };
+
+                // Update state with calculated from/to values
+                {
+                    let mut s = app.state.write().await;
+                    if let Some(ref mut idx) = s.index {
+                        idx.from = from;
+                        idx.to = to;
+                        idx.current = from;
+                    }
+                }
+
+                if from <= to {
+                    info!(from, to, strategy = ?reindex_req.strategy, "reindexing");
+                    for mut strat in strats {
+                        strat.force_reindex = true;
+                        match run_indexer(provider.clone(), db, from, to, chunk_size, vec![strat], Some(app.clone())).await {
+                            Ok(_) => {}
+                            Err(e) => error!("reindex error: {e}"),
+                        }
+                        // Check if interrupted (pause or another reindex)
+                        if app.should_interrupt().await { break; }
+                    }
+                }
+            }
+
+            // Clear reindex if completed (not interrupted)
+            if !app.should_interrupt().await {
+                let mut s = app.state.write().await;
+                s.index = None;
+                s.status = Status::Running;
+                info!("reindex done");
+            }
+            continue;
+        }
+
+        // Resume existing index if paused mid-way
+        let existing_index = app.state.read().await.index.clone();
+        if let Some(idx) = existing_index {
+            if !idx.is_reindex && idx.current > 0 && idx.current < idx.to {
+                // Resume from where we left off
+                info!(from = idx.current, to = idx.to, "resuming indexing");
+                
+                match run_indexer(provider.clone(), db, idx.current, idx.to, chunk_size, strategies.clone(), Some(app.clone())).await {
+                    Ok(processed) => {
+                        if !app.should_interrupt().await {
+                            last = processed;
+                            let mut s = app.state.write().await;
+                            s.last_block = last;
+                            s.index = None;
+                        }
+                    }
+                    Err(e) => error!("indexer error: {e}"),
+                }
+                continue;
+            }
+        }
+
+        // Normal indexing: follow chain head
+        let head = provider.get_block_number().await? as u64;
+        let safe = head.saturating_sub(confirmations);
+        
+        {
+            let mut s = app.state.write().await;
+            s.head = head;
+            s.last_block = last;
+        }
+
+        if last < safe {
+            let from = last + 1;
+            info!(from, to = safe, "processing");
+            
+            // Set normal index state
+            {
+                let mut s = app.state.write().await;
+                s.index = Some(IndexState {
+                    from,
+                    to: safe,
+                    current: from,
+                    strategy: None,
+                    is_reindex: false,
+                });
+            }
+
+            match run_indexer(provider.clone(), db, from, safe, chunk_size, strategies.clone(), Some(app.clone())).await {
+                Ok(processed) => {
+                    if !app.should_interrupt().await {
+                        last = processed;
+                        let mut s = app.state.write().await;
+                        s.last_block = last;
+                        s.index = None;
+                    }
+                }
+                Err(e) => error!("indexer error: {e}"),
+            }
+        } else {
+            // Clear index state when idle
+            app.state.write().await.index = None;
+        }
+
+        tokio::time::sleep(std::time::Duration::from_secs(poll_secs)).await;
     }
 }
