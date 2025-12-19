@@ -120,7 +120,12 @@ where
             .push_bind(r.last_update_block_number)
             .push_bind(&r.last_update_tx_hash);
     });
-    qb.push(" ON CONFLICT (account) DO NOTHING");
+    qb.push(" ON CONFLICT (account) DO UPDATE SET ");
+    qb.push("username = EXCLUDED.username, ");
+    qb.push("eoas = EXCLUDED.eoas, ");
+    qb.push("noun = EXCLUDED.noun, ");
+    qb.push("last_update_block_number = EXCLUDED.last_update_block_number, ");
+    qb.push("last_update_tx_hash = EXCLUDED.last_update_tx_hash");
 
     let batch_res = qb.build().execute(db).await;
     let took_ms = t0.elapsed().as_millis();

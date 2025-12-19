@@ -207,7 +207,10 @@ where
             .push_bind(row.txblock)
             .push_bind(row.block_time);
     });
-    qb.push(" ON CONFLICT (account, token, tx_hash, direction) DO NOTHING");
+    qb.push(" ON CONFLICT (account, token, tx_hash, direction) DO UPDATE SET ");
+    qb.push("amount = EXCLUDED.amount, ");
+    qb.push("tx_block = EXCLUDED.tx_block, ");
+    qb.push("block_time = EXCLUDED.block_time");
     let batch_res = qb.build().execute(db).await;
     let took_ms = t0.elapsed().as_millis();
 
