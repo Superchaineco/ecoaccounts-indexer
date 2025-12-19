@@ -1,45 +1,32 @@
 {
   "$schema": "https://schema.railpack.com",
   "packages": {
-    "rust": "1.89",
     "node": "20"
   },
-  "caches": {
-    "npm": {
-      "directory": "/root/.npm",
-      "type": "shared"
-    },
-    "cargo": {
-      "directory": "/root/.cargo/registry",
-      "type": "shared"
-    }
-  },
   "steps": {
-    "install": {
-      "inputs": [{ "local": true, "include": ["."] }],
+    "dashboard-install": {
       "commands": [
         "cd dashboard && npm ci"
-      ],
-      "caches": ["npm"]
+      ]
     },
-    "build": {
-      "inputs": [{ "step": "install" }],
+    "dashboard-build": {
+      "inputs": [{ "step": "dashboard-install" }],
       "commands": [
-        "cd dashboard && npm run build",
-        "...",
-        "cp -r dashboard/dist bin/dashboard"
-      ],
-      "caches": ["cargo"]
+        "cd dashboard && npm run build"
+      ]
+    },
+    "copy-dashboard": {
+      "inputs": [{ "step": "dashboard-build" }],
+      "commands": [
+        "mkdir -p bin && cp -r dashboard/dist bin/dashboard"
+      ]
     }
   },
   "deploy": {
+    "inputs": [{ "step": "copy-dashboard" }],
     "startCommand": "./bin/super_accounts",
     "variables": {
       "DASHBOARD_PATH": "./bin/dashboard"
-    },
-    "inputs": [
-      "...",
-      { "step": "build", "include": ["bin/dashboard"] }
-    ]
+    }
   }
 }
