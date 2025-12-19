@@ -216,13 +216,13 @@ pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> 
         .layer(middleware::from_fn_with_state(app.clone(), auth))
         .with_state(app.clone());
 
+    // Start with API routes
     let mut router = Router::new()
         .nest("/api", api_routes.clone())
         // Keep old routes for backward compatibility
-        .merge(api_routes)
-        .layer(cors);
+        .merge(api_routes);
 
-    // Serve dashboard static files if path is provided
+    // Serve dashboard static files if path is provided (NO AUTH REQUIRED)
     if let Some(path) = dashboard_path {
         if path.exists() {
             let index_path = path.join("index.html");
@@ -230,14 +230,15 @@ pub fn router_with_dashboard(app: Arc<App>, dashboard_path: Option<PathBuf>) -> 
             // Create ServeDir with fallback to index.html for SPA routing
             let serve_dir = ServeDir::new(&path).fallback(ServeFile::new(&index_path));
             
-            // Serve static files at /dashboard
+            // Serve static files at /dashboard - this is public, no auth needed
             router = router.nest_service("/dashboard", serve_dir);
             
-            tracing::info!("Dashboard: serving from {:?} at /dashboard", path);
+            tracing::info!("Dashboard: serving from {:?} at /dashboard (public, no auth)", path);
         } else {
             tracing::warn!("Dashboard path {:?} does not exist", path);
         }
     }
 
-    router
+    // Apply CORS to all routes
+    router.layer(cors)
 }
