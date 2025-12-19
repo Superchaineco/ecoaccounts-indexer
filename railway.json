@@ -1,0 +1,10 @@
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "RAILPACK",
+    "buildCommand": "cd dashboard && npm ci && npm run build && cd .. && cargo build --release --package super_accounts && mkdir -p bin && cp target/release/super_accounts bin/ && cp -r dashboard/dist bin/dashboard"
+  },
+  "deploy": {
+    "startCommand": "./bin/super_accounts"
+  }
+}
