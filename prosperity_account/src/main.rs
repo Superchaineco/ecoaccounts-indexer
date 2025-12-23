@@ -13,7 +13,7 @@ use indexer_core::strategies::StrategyConfig;
 
 use crate::indexer::run_indexer_and_follow;
 use crate::strategies::{
-    ProsperityAccountCreatedProcessor, VaultsTransactionsStCeloManagerProcessor,
+    ProsperityAccountCreatedProcessor, VaultsTransactionsStCeloManagerProcessor, SuperChainBadgesMintedProccesor
 };
 use tracing::info;
 
@@ -42,6 +42,12 @@ async fn main() -> Result<()> {
             "vaults_transactions_stcelo",
             config::read_block("STRAT_VAULTS_TRANSACTIONS_STCELO_FROM", 43000000),
             config::read_bool("STRAT_VAULTS_TRANSACTIONS_STCELO_REINDEX", false),
+        ),
+      StrategyConfig::new(
+            *Box::new(SuperChainBadgesMintedProccesor),
+            "badges_minted",
+            config::read_block("STRAT_BADGES_MINTED_FROM", 29117140),
+            config::read_bool("STRAT_BADGES_MINTED_REINDEX", false),
         ),
     ];
     let provider = ProviderBuilder::new().connect(&rpc_url).await?;

@@ -18,6 +18,14 @@ pub fn st_celo_addr() -> Address {
         .unwrap_or(address!("0xC668583dcbDc9ae6FA3CE46462758188adfdfC24"))
 }
 
+pub fn badges_addr() -> Address {
+    env::var("STRAT_BADGES_MINTED_ADDR")
+        .ok()
+        .and_then(|s| s.parse::<Address>().ok())
+        .unwrap_or(address!("0xd47C56513E640E394024FaCBBe5032cf604Bb699"))
+}
+
+
 pub fn read_block(key: &str, fallback: u64) -> u64 {
     env::var(key)
         .ok()
