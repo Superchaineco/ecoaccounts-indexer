@@ -266,6 +266,18 @@ where
                     info!("╚══════════════════════════════════════════════════════════════╝");
                     for mut strat in strats {
                         strat.force_reindex = true;
+                        
+                        // Clear the indexed range for this strategy to force full reindex
+                        if let Err(e) = sqlx::query("DELETE FROM indexed_ranges WHERE strategy_name = $1")
+                            .bind(strat.name)
+                            .execute(db)
+                            .await
+                        {
+                            warn!(strategy = strat.name, error = %e, "failed to clear indexed_ranges");
+                        } else {
+                            info!(strategy = strat.name, "cleared indexed_ranges for reindex");
+                        }
+                        
                         match run_indexer(provider.clone(), db, from, to, &config, vec![strat], Some(app.clone())).await {
                             Ok(_) => {}
                             Err(e) => error!("reindex error: {e}"),
