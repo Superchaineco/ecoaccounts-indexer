@@ -193,30 +193,39 @@ where
             },
         })
     }
-    let mut qb = QueryBuilder::new(
-        "INSERT INTO vaults_transactions (
-            account, token, amount, direction, tx_hash, tx_block, block_time
-        ) ",
-    );
-    qb.push_values(rows.iter(), |mut b, row| {
-        b.push_bind(&row.account_hex)
-            .push_bind(&row.token_hex)
-            .push_bind(&row.amount)
-            .push_bind(row.direction.as_str())
-            .push_bind(&row.txhash_hex)
-            .push_bind(row.txblock)
-            .push_bind(row.block_time);
-    });
-    qb.push(" ON CONFLICT (account, token, tx_hash, direction) DO UPDATE SET ");
-    qb.push("amount = EXCLUDED.amount, ");
-    qb.push("tx_block = EXCLUDED.tx_block, ");
-    qb.push("block_time = EXCLUDED.block_time");
-    let batch_res = qb.build().execute(db).await;
+
+    // Process in batches to avoid parameter limit (7 columns per row, max 65535 params)
+    let mut rows_written = 0u64;
+    const BATCH_SIZE: usize = 500;
+
+    for chunk in rows.chunks(BATCH_SIZE) {
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO vaults_transactions (
+                account, token, amount, direction, tx_hash, tx_block, block_time
+            ) ",
+        );
+        qb.push_values(chunk.iter(), |mut b, row| {
+            b.push_bind(&row.account_hex)
+                .push_bind(&row.token_hex)
+                .push_bind(&row.amount)
+                .push_bind(row.direction.as_str())
+                .push_bind(&row.txhash_hex)
+                .push_bind(row.txblock)
+                .push_bind(row.block_time);
+        });
+        qb.push(" ON CONFLICT (account, token, tx_hash, direction) DO UPDATE SET ");
+        qb.push("amount = EXCLUDED.amount, ");
+        qb.push("tx_block = EXCLUDED.tx_block, ");
+        qb.push("block_time = EXCLUDED.block_time");
+        let batch_res = qb.build().execute(db).await?;
+        rows_written += batch_res.rows_affected();
+    }
+
     let took_ms = t0.elapsed().as_millis();
 
     Ok(Stats {
         logs_found: rows.len(),
-        rows_written: batch_res?.rows_affected(),
+        rows_written,
         from_block: from,
         to_block: to,
         took_ms,

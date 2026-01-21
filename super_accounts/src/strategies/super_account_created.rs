@@ -100,46 +100,54 @@ where
         });
     }
 
-    let mut qb = QueryBuilder::new(
-        "INSERT INTO super_accounts (
-            account, nationality, username, eoas, level,
-            noun, total_points, total_badges,
-            last_update_block_number, last_update_tx_hash
-        ) ",
-    );
+    // Process in batches to avoid parameter limit (10 columns per row, max 65535 params)
+    let mut rows_written = 0u64;
+    const BATCH_SIZE: usize = 500;
 
-    qb.push_values(rows.iter(), |mut b, r| {
-        b.push_bind(&r.account_hex)
-            .push_bind(Option::<&str>::None) // nationality NULL
-            .push_bind(&r.username)
-            .push_bind(&r.eoas) // TEXT[]
-            .push_bind(0i32) // level
-            .push_bind(&r.noun_json) // JSONB
-            .push_bind(0i32) // total_points
-            .push_bind(0i32) // total_badges
-            .push_bind(r.last_update_block_number)
-            .push_bind(&r.last_update_tx_hash);
-    });
-    qb.push(" ON CONFLICT (account) DO UPDATE SET ");
-    qb.push("username = EXCLUDED.username, ");
-    qb.push("eoas = EXCLUDED.eoas, ");
-    qb.push("noun = EXCLUDED.noun, ");
-    qb.push("last_update_block_number = EXCLUDED.last_update_block_number, ");
-    qb.push("last_update_tx_hash = EXCLUDED.last_update_tx_hash");
+    for chunk in rows.chunks(BATCH_SIZE) {
+        let mut qb = QueryBuilder::new(
+            "INSERT INTO super_accounts (
+                account, nationality, username, eoas, level,
+                noun, total_points, total_badges,
+                last_update_block_number, last_update_tx_hash
+            ) ",
+        );
 
-    let batch_res = qb.build().execute(db).await;
+        qb.push_values(chunk.iter(), |mut b, r| {
+            b.push_bind(&r.account_hex)
+                .push_bind(Option::<&str>::None) // nationality NULL
+                .push_bind(&r.username)
+                .push_bind(&r.eoas) // TEXT[]
+                .push_bind(0i32) // level
+                .push_bind(&r.noun_json) // JSONB
+                .push_bind(0i32) // total_points
+                .push_bind(0i32) // total_badges
+                .push_bind(r.last_update_block_number)
+                .push_bind(&r.last_update_tx_hash);
+        });
+        qb.push(" ON CONFLICT (account) DO UPDATE SET ");
+        qb.push("username = EXCLUDED.username, ");
+        qb.push("eoas = EXCLUDED.eoas, ");
+        qb.push("noun = EXCLUDED.noun, ");
+        qb.push("last_update_block_number = EXCLUDED.last_update_block_number, ");
+        qb.push("last_update_tx_hash = EXCLUDED.last_update_tx_hash");
+
+        let batch_res = qb.build().execute(db).await?;
+        rows_written += batch_res.rows_affected();
+    }
+
     let took_ms = t0.elapsed().as_millis();
     tracing::info!(
         from = from,
         to = to,
         logs = rows.len(),
-        rows_written = batch_res.as_ref().map(|r| r.rows_affected()).unwrap_or(0),
+        rows_written = rows_written,
         took_ms,
         "chunk processed",
     );
     Ok(Stats {
         logs_found: rows.len(),
-        rows_written: batch_res?.rows_affected(),
+        rows_written,
         from_block: from,
         to_block: to,
         took_ms,

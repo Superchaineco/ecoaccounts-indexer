@@ -20,6 +20,12 @@ sol!(
         string superChainId,
         NounMetadata noun
     );
+
+    event OwnerAdded(
+        address indexed safe,
+        address indexed newOwner,
+        string superChainId
+    );
+
     }
 );
-
